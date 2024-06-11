@@ -2,9 +2,9 @@
 
 Setup
 -----
-Use script `gym_pybullet_drones/assets/clone_bfs.sh` to create
+Use script `gym_pybullet_adrp/assets/clone_bfs.sh` to create
 executables for as many drones as needed (e.g. 2):
-    $ ./gym_pybullet_drones/assets/clone_bfs.sh 2
+    $ ./gym_pybullet_adrp/assets/clone_bfs.sh 2
 
 Note
 -------
@@ -21,7 +21,7 @@ in the simulation in separate terminals:
 
 Run as:
 
-    $ cd gym-pybullet-drones/gym_pybullet_drones/examples/
+    $ cd gym-pybullet-drones/gym_pybullet_adrp/examples/
     $ python beta.py
 
 """

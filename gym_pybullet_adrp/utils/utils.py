@@ -10,7 +10,7 @@ from pathlib import Path
 import yaml
 from munch import Munch, munchify
 
-from gym_pybullet_drones.control import BaseControl
+from gym_pybullet_adrp.control import BaseControl
 
 ################################################################################
 
@@ -62,7 +62,7 @@ def str2bool(val):
 
 ################################################################################
 
-def load_config(path: Path) -> Munch:
+def load_config(path: str | Path) -> Munch:
     """Load the race config file.
 
     Args:
@@ -71,18 +71,22 @@ def load_config(path: Path) -> Munch:
     Returns:
         The munchified config dict.
     """
+    if isinstance(path, str):
+        path = Path(path)
     assert path.exists(), f"Configuration file not found: {path}"
     with open(path, "r", encoding="utf-8") as file:
         return munchify(yaml.safe_load(file))
 
 ################################################################################
 
-def load_controller(path: Path) -> BaseControl:
+def load_controller(path: str | Path) -> BaseControl:
     """Load the controller module from the given path and return the Controller class.
 
     Args:
         path: Path to the controller module.
     """
+    if isinstance(path, str):
+        path = Path(path)
     assert path.exists(), f"Controller file not found: {path}"
     assert path.is_file(), f"Controller path is not a file: {path}"
     spec = importlib.util.spec_from_file_location("controller", path)

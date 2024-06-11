@@ -4,9 +4,13 @@ import numpy as np
 import pybullet as pb
 from munch import Munch
 
-from gym_pybullet_drones.envs.BaseRLAviary import BaseRLAviary
-from gym_pybullet_drones.utils.enums import DroneModel, Physics, ActionType, ObservationType
-from gym_pybullet_drones.utils.constants import CTRL_FREQ, FIRMWARE_FREQ, DEG_TO_RAD
+from gym_pybullet_adrp.envs.BaseRLAviary import BaseRLAviary
+from gym_pybullet_adrp.utils.enums import DroneModel, Physics, ActionType, ObservationType
+from gym_pybullet_adrp.utils.constants import CTRL_FREQ, FIRMWARE_FREQ, DEG_TO_RAD
+
+
+DIR = "gym_pybullet_adrp/assets/"
+
 
 class MultiRaceAviary(BaseRLAviary):
     """Multi-agent RL problem: head-to-head race."""
@@ -55,10 +59,6 @@ class MultiRaceAviary(BaseRLAviary):
         act : ActionType, optional
             The type of action space (1 or 3D; RPMS, thrust and torques, waypoint with PID control)
         """
-        self.config = race_config
-        self.env_bounds = np.array([3, 3, 2]) # as stated in drone racing paper
-        self.drones_eliminated = np.array([False] * num_drones)
-
         super().__init__(
             drone_model=drone_model,
             num_drones=num_drones,
@@ -74,6 +74,12 @@ class MultiRaceAviary(BaseRLAviary):
             act=act
         )
 
+        self.config = race_config
+        self.env_bounds = np.array([3, 3, 2]) # as stated in drone racing paper
+        self.drones_eliminated = np.array([False] * num_drones)
+
+        self._addGatesAndObstacles()
+
 ###############################################################################
 
     def _addGatesAndObstacles(self):
@@ -84,7 +90,7 @@ class MultiRaceAviary(BaseRLAviary):
         gates = np.array(self.config.gates)
         for g in gates:
             pb.loadURDF(
-                "low_portal.urdf" if g[-1] > 0 else "portal.urdf",
+                DIR + ("low_portal.urdf" if g[-1] > 0 else "portal.urdf"),
                 g[:3],
                 pb.getQuaternionFromEuler(g[3:6]),
                 physicsClientId=self.CLIENT
@@ -93,7 +99,7 @@ class MultiRaceAviary(BaseRLAviary):
         obstacles = np.array(self.config.obstacles)
         for o in obstacles:
             pb.loadURDF(
-                "obstacle.urdf",
+                DIR + "obstacle.urdf",
                 o[:3],
                 pb.getQuaternionFromEuler([0, 0, 0]),
                 physicsClientId=self.CLIENT
@@ -132,7 +138,7 @@ class MultiRaceAviary(BaseRLAviary):
             state = self._getDroneStateVector(i)
 
             out_of_bounds = np.any(np.abs(state[:3]) > self.env_bounds)
-            unstable = np.any(np.abs(state[12:15]) > 0.5) # TODO arbitrary theshold
+            unstable = False # np.any(np.abs(state[13:16]) > 0.5) # TODO arbitrary theshold
             crashed = False # pb.getContactPoints() # TODO check collision with ground and obstacles
 
             self.drones_eliminated[i] = out_of_bounds or unstable or crashed

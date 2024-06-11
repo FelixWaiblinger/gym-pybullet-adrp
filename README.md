@@ -4,7 +4,7 @@ This is a minimalist refactoring of the original `gym-pybullet-drones` repositor
 
 > **NOTE**: if you prefer to access the original codebase, presented at IROS in 2021, please `git checkout [paper|master]` after cloning the repo, and refer to the corresponding `README.md`'s.
 
-<img src="gym_pybullet_drones/assets/helix.gif" alt="formation flight" width="325"> <img src="gym_pybullet_drones/assets/helix.png" alt="control info" width="425">
+<img src="gym_pybullet_adrp/assets/helix.gif" alt="formation flight" width="325"> <img src="gym_pybullet_adrp/assets/helix.png" alt="control info" width="425">
 
 ## Installation
 
@@ -27,7 +27,7 @@ pip3 install -e . # if needed, `sudo apt install build-essential` to install `gc
 ### PID control examples
 
 ```sh
-cd gym_pybullet_drones/examples/
+cd gym_pybullet_adrp/examples/
 python3 pid.py # position and velocity reference
 python3 pid_velocity.py # desired velocity reference
 ```
@@ -35,26 +35,26 @@ python3 pid_velocity.py # desired velocity reference
 ### Downwash effect example
 
 ```sh
-cd gym_pybullet_drones/examples/
+cd gym_pybullet_adrp/examples/
 python3 downwash.py
 ```
 
 ### Reinforcement learning examples (SB3's PPO)
 
 ```sh
-cd gym_pybullet_drones/examples/
+cd gym_pybullet_adrp/examples/
 python learn.py # task: single drone hover at z == 1.0
 python learn.py --multiagent true # task: 2-drone hover at z == 1.2 and 0.7
 ```
 
-<img src="gym_pybullet_drones/assets/rl.gif" alt="rl example" width="375"> <img src="gym_pybullet_drones/assets/marl.gif" alt="marl example" width="375">
+<img src="gym_pybullet_adrp/assets/rl.gif" alt="rl example" width="375"> <img src="gym_pybullet_adrp/assets/marl.gif" alt="marl example" width="375">
 
 ### utiasDSL `pycffirmware` Python Bindings example (multiplatform, single-drone)
 
 Install [`pycffirmware`](https://github.com/utiasDSL/pycffirmware?tab=readme-ov-file#installation) for Ubuntu, macOS, or Windows
 
 ```sh
-cd gym_pybullet_drones/examples/
+cd gym_pybullet_adrp/examples/
 python3 cff-dsl.py
 ```
 
@@ -65,7 +65,7 @@ git clone https://github.com/betaflight/betaflight # use the `master` branch at 
 cd betaflight/ 
 make arm_sdk_install # if needed, `apt install curl``
 make TARGET=SITL # comment out line: https://github.com/betaflight/betaflight/blob/master/src/main/main.c#L52
-cp ~/gym-pybullet-drones/gym_pybullet_drones/assets/eeprom.bin ~/betaflight/ # assuming both gym-pybullet-drones/ and betaflight/ were cloned in ~/
+cp ~/gym-pybullet-drones/gym_pybullet_adrp/assets/eeprom.bin ~/betaflight/ # assuming both gym-pybullet-drones/ and betaflight/ were cloned in ~/
 betaflight/obj/main/betaflight_SITL.elf
 ```
 
@@ -73,7 +73,7 @@ In another terminal, run the example
 
 ```sh
 conda activate drones
-cd gym_pybullet_drones/examples/
+cd gym_pybullet_adrp/examples/
 python3 beta.py --num_drones 1 # check the steps in the file's docstrings to use multiple drones
 ```
 

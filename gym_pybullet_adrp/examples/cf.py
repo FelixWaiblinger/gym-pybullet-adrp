@@ -8,7 +8,7 @@ Step 2: Follow the install instructions for pycffirmware in its README
 Example
 -------
 In terminal, run: 
-python gym_pybullet_drones/examples/cf.py
+python gym_pybullet_adrp/examples/cf.py
 
 """
 import time
