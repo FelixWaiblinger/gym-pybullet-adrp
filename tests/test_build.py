@@ -1,6 +1,6 @@
 def test_imports():
-    import gym_pybullet_drones
-    import gym_pybullet_drones.control
-    import gym_pybullet_drones.envs
-    import gym_pybullet_drones.examples
-    import gym_pybullet_drones.utils
+    import gym_pybullet_adrp
+    import gym_pybullet_adrp.control
+    import gym_pybullet_adrp.envs
+    import gym_pybullet_adrp.examples
+    import gym_pybullet_adrp.utils
