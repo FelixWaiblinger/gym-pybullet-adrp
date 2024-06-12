@@ -6,10 +6,7 @@ from munch import Munch
 
 from gym_pybullet_adrp.envs.BaseRLAviary import BaseRLAviary
 from gym_pybullet_adrp.utils.enums import DroneModel, Physics, ActionType, ObservationType
-from gym_pybullet_adrp.utils.constants import CTRL_FREQ, FIRMWARE_FREQ, DEG_TO_RAD
-
-
-DIR = "gym_pybullet_adrp/assets/"
+from gym_pybullet_adrp.utils.constants import FIRMWARE_FREQ, DEG_TO_RAD, URDF_DIR
 
 
 class MultiRaceAviary(BaseRLAviary):
@@ -24,11 +21,11 @@ class MultiRaceAviary(BaseRLAviary):
         neighbourhood_radius: float=np.inf,
         physics: Physics=Physics.PYB,
         pyb_freq: int=FIRMWARE_FREQ,
-        ctrl_freq: int=CTRL_FREQ,
+        ctrl_freq: int=FIRMWARE_FREQ,
         gui: bool=False,
         record: bool=False,
         obs: ObservationType=ObservationType.KIN,
-        act: ActionType=ActionType.VEL
+        act: ActionType=ActionType.PID
     ):
         """Initialization of a multi-agent RL environment.
 
@@ -76,9 +73,38 @@ class MultiRaceAviary(BaseRLAviary):
 
         self.config = race_config
         self.env_bounds = np.array([3, 3, 2]) # as stated in drone racing paper
-        self.drones_eliminated = np.array([False] * num_drones)
+        self.drones_eliminated = None
+
+###############################################################################
+
+    def reset(self,
+        seed : int = None,
+        options : dict = None
+    ):
+        """Resets the environment.
+
+        Parameters
+        ----------
+        seed : int, optional
+            Random seed.
+        options : dict[..], optional
+            Additinonal options, unused
+
+        Returns
+        -------
+        ndarray | dict[..]
+            The initial observation, check the specific implementation of `_computeObs()`
+            in each subclass for its format.
+        dict[..]
+            Additional information as a dictionary, check the specific implementation of `_computeInfo()`
+            in each subclass for its format.
+        """
+        initial_obs, initial_info = super().reset(seed, options)
 
         self._addGatesAndObstacles()
+        self.drones_eliminated = np.array([False] * self.NUM_DRONES)
+
+        return initial_obs, initial_info
 
 ###############################################################################
 
@@ -90,7 +116,7 @@ class MultiRaceAviary(BaseRLAviary):
         gates = np.array(self.config.gates)
         for g in gates:
             pb.loadURDF(
-                DIR + ("low_portal.urdf" if g[-1] > 0 else "portal.urdf"),
+                URDF_DIR + ("low_portal.urdf" if g[-1] > 0 else "portal.urdf"),
                 g[:3],
                 pb.getQuaternionFromEuler(g[3:6]),
                 physicsClientId=self.CLIENT
@@ -99,7 +125,7 @@ class MultiRaceAviary(BaseRLAviary):
         obstacles = np.array(self.config.obstacles)
         for o in obstacles:
             pb.loadURDF(
-                DIR + "obstacle.urdf",
+                URDF_DIR + "obstacle.urdf",
                 o[:3],
                 pb.getQuaternionFromEuler([0, 0, 0]),
                 physicsClientId=self.CLIENT

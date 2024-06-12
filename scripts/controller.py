@@ -16,6 +16,7 @@ class Controller(BaseControl):
     ################################################################################
 
     def __init__(self,
+                 drone_id: int,
                  drone_model: DroneModel=DroneModel.CF2X,
                  g: float=9.8
                  ):
@@ -31,6 +32,7 @@ class Controller(BaseControl):
 
         super().__init__(drone_model, g)
 
+        self.drone_id = drone_id
         self.agent = None #SAC.load()
         self.reset()
 
@@ -47,7 +49,11 @@ class Controller(BaseControl):
 
     def predict(self, observation):
         """Predict the next action."""
-        return np.ones(4, dtype=np.float32) #self.agent.predict(observation)
+        target = np.array([1, 1, 1 + self.drone_id])
+        position = observation[self.drone_id, :3]
+        action = np.linalg.norm(target - position, ord=2)
+        action = np.hstack([action, np.zeros(1)])
+        return action.astype(np.float32)
 
     ################################################################################
 

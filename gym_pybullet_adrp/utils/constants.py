@@ -2,6 +2,7 @@
 
 import math
 
+URDF_DIR = "gym_pybullet_adrp/assets/"
 
 Z_LOW = 0.3
 Z_HIGH = 0.775

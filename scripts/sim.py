@@ -41,7 +41,9 @@ def simulate(
     # initialize drone agents
     if isinstance(controller, str):
         controller = [controller] * n_drones
-    agents: List[Controller] = [load_controller(c)() for c in controller]
+    agents: List[Controller] = []
+    for drone_id, c in enumerate(controller):
+        agents.append(load_controller(c)(drone_id))
 
     # track episode statistics
     stats = {
