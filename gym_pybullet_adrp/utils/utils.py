@@ -8,9 +8,39 @@ import argparse
 from pathlib import Path
 
 import yaml
+import numpy as np
 from munch import Munch, munchify
 
-from gym_pybullet_adrp.control import BaseControl
+from gym_pybullet_adrp.utils.constants import FIRMWARE_PATH
+
+
+################################################################################
+
+def get_quaternion_from_euler(roll, pitch, yaw):
+    """Convert an Euler angle to a quaternion.
+
+    Args:
+        roll (float): The roll (rotation around x-axis) angle in radians.
+        pitch (float): The pitch (rotation around y-axis) angle in radians.
+        yaw (float): The yaw (rotation around z-axis) angle in radians.
+
+    Returns:
+        list: The orientation in quaternion [x,y,z,w] format
+    """
+    qx = np.sin(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) - np.cos(roll / 2) * np.sin(
+        pitch / 2
+    ) * np.sin(yaw / 2)
+    qy = np.cos(roll / 2) * np.sin(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.cos(
+        pitch / 2
+    ) * np.sin(yaw / 2)
+    qz = np.cos(roll / 2) * np.cos(pitch / 2) * np.sin(yaw / 2) - np.sin(roll / 2) * np.sin(
+        pitch / 2
+    ) * np.cos(yaw / 2)
+    qw = np.cos(roll / 2) * np.cos(pitch / 2) * np.cos(yaw / 2) + np.sin(roll / 2) * np.sin(
+        pitch / 2
+    ) * np.sin(yaw / 2)
+
+    return [qx, qy, qz, qw]
 
 ################################################################################
 
@@ -79,7 +109,7 @@ def load_config(path: str | Path) -> Munch:
 
 ################################################################################
 
-def load_controller(path: str | Path) -> BaseControl:
+def load_controller(path: str | Path, class_name: str="Controller"):
     """Load the controller module from the given path and return the Controller class.
 
     Args:
@@ -93,10 +123,26 @@ def load_controller(path: str | Path) -> BaseControl:
     controller_module = importlib.util.module_from_spec(spec)
     sys.modules["controller"] = controller_module
     spec.loader.exec_module(controller_module)
-    assert hasattr(controller_module, "Controller")
-    assert issubclass(controller_module.Controller, BaseControl)
+    assert hasattr(controller_module, class_name)
+    ctrl_class = controller_module.__dict__[class_name]
 
     try:
-        return controller_module.Controller
+        return ctrl_class
     except ImportError as e:
         raise e
+
+################################################################################
+
+def load_firmware(path_to_repos: str | Path):
+    """Load an individual version of the crazyflie firmware c bindings."""
+    if isinstance(path_to_repos, str):
+        path_to_repos = Path(path_to_repos)
+    path = path_to_repos / FIRMWARE_PATH
+    assert path.exists(), f"Controller file not found: {path}"
+    assert path.is_file(), f"Controller path is not a file: {path}"
+    spec = importlib.util.spec_from_file_location("firmware", path)
+    firmware = importlib.util.module_from_spec(spec)
+    sys.modules["firmware"] = firmware
+    spec.loader.exec_module(firmware)
+
+    return firmware

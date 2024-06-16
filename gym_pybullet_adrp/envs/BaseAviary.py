@@ -673,9 +673,9 @@ class BaseAviary(gym.Env):
                 if np.linalg.norm(self.pos[i, :]-self.pos[j+i+1, :]) < self.NEIGHBOURHOOD_RADIUS:
                     adjacency_mat[i, j+i+1] = adjacency_mat[j+i+1, i] = 1
         return adjacency_mat
-    
+
     ################################################################################
-    
+
     def _physics(self,
                  rpm,
                  nth_drone
@@ -748,7 +748,7 @@ class BaseAviary(gym.Env):
                                      flags=p.LINK_FRAME,
                                      physicsClientId=self.CLIENT
                                      )
-    
+
     ################################################################################
 
     def _drag(self,
@@ -779,7 +779,7 @@ class BaseAviary(gym.Env):
                              flags=p.LINK_FRAME,
                              physicsClientId=self.CLIENT
                              )
-    
+
     ################################################################################
 
     def _downwash(self,
@@ -909,7 +909,7 @@ class BaseAviary(gym.Env):
         if np.any(np.abs(action) > 1):
             print("\n[ERROR] it", self.step_counter, "in BaseAviary._normalizedActionToRPM(), out-of-bound action")
         return np.where(action <= 0, (action+1)*self.HOVER_RPM, self.HOVER_RPM + (self.MAX_RPM - self.HOVER_RPM)*action) # Non-linear mapping: -1 -> 0, 0 -> HOVER_RPM, 1 -> MAX_RPM`
-    
+
     ################################################################################
 
     def _showDroneLocalAxes(self,
@@ -949,7 +949,7 @@ class BaseAviary(gym.Env):
                                                       replaceItemUniqueId=int(self.Z_AX[nth_drone]),
                                                       physicsClientId=self.CLIENT
                                                       )
-    
+
     ################################################################################
 
     def _addObstacles(self):
@@ -976,9 +976,9 @@ class BaseAviary(gym.Env):
                    p.getQuaternionFromEuler([0,0,0]),
                    physicsClientId=self.CLIENT
                    )
-    
+
     ################################################################################
-    
+
     def _parseURDFParameters(self):
         """Loads parameters from an URDF file.
 
@@ -1012,9 +1012,9 @@ class BaseAviary(gym.Env):
         DW_COEFF_3 = float(URDF_TREE[0].attrib['dw_coeff_3'])
         return M, L, THRUST2WEIGHT_RATIO, J, J_INV, KF, KM, COLLISION_H, COLLISION_R, COLLISION_Z_OFFSET, MAX_SPEED_KMH, \
                GND_EFF_COEFF, PROP_RADIUS, DRAG_COEFF, DW_COEFF_1, DW_COEFF_2, DW_COEFF_3
-    
+
     ################################################################################
-    
+
     def _actionSpace(self):
         """Returns the action space of the environment.
 
@@ -1022,7 +1022,7 @@ class BaseAviary(gym.Env):
 
         """
         raise NotImplementedError
-    
+
     ################################################################################
 
     def _observationSpace(self):
@@ -1032,7 +1032,7 @@ class BaseAviary(gym.Env):
 
         """
         raise NotImplementedError
-    
+
     ################################################################################
     
     def _computeObs(self):
@@ -1042,7 +1042,7 @@ class BaseAviary(gym.Env):
 
         """
         raise NotImplementedError
-    
+
     ################################################################################
 
     def _preprocessAction(self,
@@ -1079,7 +1079,7 @@ class BaseAviary(gym.Env):
 
         """
         raise NotImplementedError
-    
+
     ################################################################################
 
     def _computeTruncated(self):

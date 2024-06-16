@@ -49,11 +49,12 @@ class Controller(BaseControl):
 
     def predict(self, observation):
         """Predict the next action."""
-        target = np.array([1, 1, 1 + self.drone_id])
-        position = observation[self.drone_id, :3]
-        action = np.linalg.norm(target - position, ord=2)
-        action = np.hstack([action, np.zeros(1)])
-        return action.astype(np.float32)
+        # target = np.array([1, 1, 1 + self.drone_id])
+        # position = observation[self.drone_id, :3]
+        # action = np.linalg.norm(target - position, ord=2)
+        # action = np.hstack([action, np.zeros(1)])
+        # return action.astype(np.float32)
+        return np.ones(3, dtype=np.float32)
 
     ################################################################################
 

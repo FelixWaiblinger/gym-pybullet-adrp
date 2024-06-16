@@ -1,4 +1,9 @@
+"""Enums"""
+
 from enum import Enum
+
+
+###############################################################################
 
 class DroneModel(Enum):
     """Drone models enumeration class."""
@@ -8,7 +13,7 @@ class DroneModel(Enum):
     RACE = "racer"  # Racer drone in the X configuration
 
 
-################################################################################
+###############################################################################
 
 class Physics(Enum):
     """Physics implementations enumeration class."""
@@ -20,7 +25,7 @@ class Physics(Enum):
     PYB_DW = "pyb_dw"                   # PyBullet physics update with downwash
     PYB_GND_DRAG_DW = "pyb_gnd_drag_dw" # PyBullet physics update with ground effect, drag, and downwash
 
-################################################################################
+###############################################################################
 
 class ImageType(Enum):
     """Camera capture image type enumeration class."""
@@ -30,7 +35,7 @@ class ImageType(Enum):
     SEG = 2     # Segmentation by object id
     BW = 3      # Black and white
 
-################################################################################
+###############################################################################
 
 class ActionType(Enum):
     """Action type enumeration class."""
@@ -40,7 +45,7 @@ class ActionType(Enum):
     ONE_D_RPM = "one_d_rpm"     # 1D (identical input to all motors) with RPMs
     ONE_D_PID = "one_d_pid"     # 1D (identical input to all motors) with PID control
 
-################################################################################
+###############################################################################
 
 class ObservationType(Enum):
     """Observation type enumeration class."""
