@@ -39,6 +39,7 @@ class ImageType(Enum):
 
 class ActionType(Enum):
     """Action type enumeration class."""
+    MEL = "mel"                 # Mellinger position control
     RPM = "rpm"                 # RPMS
     PID = "pid"                 # PID control
     VEL = "vel"                 # Velocity input (using PID control)
@@ -51,3 +52,18 @@ class ObservationType(Enum):
     """Observation type enumeration class."""
     KIN = "kin"     # Kinematic information (pose, linear and angular velocities)
     RGB = "rgb"     # RGB camera capture in each drone's POV
+
+###############################################################################
+
+class Command(Enum):
+    """Mellinger controller high-level command class."""
+    FULLSTATE = "fst"
+    TAKEOFF = "tko"
+    TAKEOFFYAW = "toy"
+    TAKEOFFVEL = "tov"
+    LAND = "lnd"
+    LANDYAW = "ldy"
+    LANDVEL = "ldv"
+    STOP = "stp"
+    GOTO = "gto"
+    NOTIFY = "ntf"

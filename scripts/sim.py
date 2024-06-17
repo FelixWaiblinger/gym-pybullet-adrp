@@ -10,12 +10,12 @@ import pybullet as pb
 import gymnasium as gym
 
 from gym_pybullet_adrp.utils import load_config, load_controller, sync
-from scripts.controller import Controller
+from user_controller import BaseController
 
 
 def simulate(
     config: str="config/getting_started.yaml",
-    controller: str | List[str]="scripts/controller.py",
+    controller: str | List[str]="user_controller/BaseController.py",
     n_runs: int=1,
     n_drones: int=2,
     gui: bool=True,
@@ -41,7 +41,7 @@ def simulate(
     # initialize drone agents
     if isinstance(controller, str):
         controller = [controller] * n_drones
-    agents: List[Controller] = []
+    agents: List[BaseController] = []
     for drone_id, c in enumerate(controller):
         agents.append(load_controller(c)(drone_id))
 

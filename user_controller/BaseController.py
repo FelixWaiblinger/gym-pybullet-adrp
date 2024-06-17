@@ -1,12 +1,12 @@
 """Controller"""
 
-import numpy as np
-from stable_baselines3 import SAC
+from abc import ABC
 
-from gym_pybullet_adrp.control import BaseControl
+import numpy as np
+
 from gym_pybullet_adrp.utils.enums import DroneModel
 
-class Controller(BaseControl):
+class BaseController(ABC):
     """Base class for control.
 
     Implements `__init__()`, `reset(), and interface `computeControlFromState()`,
@@ -15,11 +15,7 @@ class Controller(BaseControl):
 
     ################################################################################
 
-    def __init__(self,
-                 drone_id: int,
-                 drone_model: DroneModel=DroneModel.CF2X,
-                 g: float=9.8
-                 ):
+    def __init__(self, drone_id: int):
         """Common control classes __init__ method.
 
         Parameters
@@ -29,8 +25,6 @@ class Controller(BaseControl):
         g : float, optional
             The gravitational acceleration in m/s^2.
         """
-
-        super().__init__(drone_model, g)
 
         self.drone_id = drone_id
         self.agent = None #SAC.load()
@@ -54,7 +48,7 @@ class Controller(BaseControl):
         # action = np.linalg.norm(target - position, ord=2)
         # action = np.hstack([action, np.zeros(1)])
         # return action.astype(np.float32)
-        return np.ones(3, dtype=np.float32)
+        return np.ones(4, dtype=np.float32)
 
     ################################################################################
 

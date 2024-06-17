@@ -109,7 +109,7 @@ def load_config(path: str | Path) -> Munch:
 
 ################################################################################
 
-def load_controller(path: str | Path, class_name: str="Controller"):
+def load_controller(path: str | Path, class_name: str="BaseController"):
     """Load the controller module from the given path and return the Controller class.
 
     Args:

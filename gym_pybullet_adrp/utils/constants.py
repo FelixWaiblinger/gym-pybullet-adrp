@@ -10,6 +10,7 @@ import numpy as np
 RAD_TO_DEG = 180 / math.pi
 DEG_TO_RAD = math.pi / 180
 VEC3_UP = np.array([0, 0, 1])
+VEC3_ZERO = np.zeros(3)
 
 ###############################################################################
 # PATH
@@ -40,3 +41,4 @@ ACCEL_LPF_CUTOFF_FREQ = 30
 SUPPLY_VOLTAGE = 3
 MOTOR_SET_ENABLE = True
 QUAD_FORMATION_X = True
+SPEED_LIMIT = 10 # TODO: replace arbitrary speed limit

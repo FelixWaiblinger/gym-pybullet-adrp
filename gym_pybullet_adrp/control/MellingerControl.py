@@ -1,13 +1,18 @@
 """Mellinger Controller"""
 
+from typing import TYPE_CHECKING
+
 import numpy as np
-import pybullet as pb
 from scipy.spatial.transform import Rotation as R
 
 from gym_pybullet_adrp.control import BaseControl
 from gym_pybullet_adrp.utils import get_quaternion_from_euler, load_firmware
 from gym_pybullet_adrp.utils.enums import DroneModel
 from gym_pybullet_adrp.utils.constants import *
+
+if TYPE_CHECKING:
+    import pycffirmware as firmware
+
 
 class MellingerControl(BaseControl):
     """Mellinger control class for Crazyflie drones."""
@@ -30,15 +35,16 @@ class MellingerControl(BaseControl):
 
         """
         # load firmware bindings for each mellinger controller seperately
-        self.firm = load_firmware("../")
+        self.firm: firmware = load_firmware("../")
         self.drone_id = drone_id
 
-        super().__init__(drone_model=drone_model, g=g)
-        assert self.DRONE_MODEL in [DroneModel.CF2X, DroneModel.CF2P], \
+        assert drone_model in [DroneModel.CF2X, DroneModel.CF2P], \
             "[ERROR] in MellingerControl.__init__(), requires \
             DroneModel.CF2X or DroneModel.CF2P"
 
-        self.KF = 3.16e-10 # NOTE: taken from safe-control-gym.firmware_wrapper
+        self.DRONE_MODEL = drone_model
+        self.GRAVITY = g*self._getURDFParameter('m')
+        self._init_variables()
 
 ###############################################################################
 
@@ -105,7 +111,6 @@ class MellingerControl(BaseControl):
 
         # Initialize visualization tools
         self.first_motor_killed_print = True
-        self.pyb_client = init_info["pyb_client"]
         self.last_visualized_setpoint = None
 
         self.results_dict = {
@@ -121,7 +126,7 @@ class MellingerControl(BaseControl):
     def computeControl(self,
                        control_timestep,
                        cur_pos,
-                       cur_quat,
+                       cur_rpy,
                        cur_vel,
                        cur_ang_vel,
                        target_pos,
@@ -166,7 +171,6 @@ class MellingerControl(BaseControl):
 
         """
         # Get state values from pybullet
-        cur_rpy = cur_quat  # body coord, rad
         body_rot = R.from_euler("XYZ", cur_rpy).inv()
 
         if self.takeoff_sent:
@@ -211,14 +215,49 @@ class MellingerControl(BaseControl):
 
         # Step controller
         self._step_controller()
-
         self.control_counter += 1
-        cur_rpy = pb.getEulerFromQuaternion(cur_quat)
-        return rpm, pos_e, computed_target_rpy[2] - cur_rpy[2]
-    
+
+        clipped_pwms = np.clip(np.array(self.pwms), MIN_PWM, MAX_PWM)
+        rpms = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
+        rpms = rpms[[3, 2, 1, 0]]
+
+        return rpms, None, None
+
 ###############################################################################
 
 # region CONTROLLER
+
+    def _init_variables(self):
+        # self.KF = self._getURDFParameter('kf')
+        self.KF = 3.16e-10 # NOTE: taken from safe-control-gym.firmware_wrapper
+        self.KM = self._getURDFParameter('km')
+        self.control_counter = 0
+        self.takeoff_sent = False
+        self.prev_rpy = np.zeros(3)
+        self.prev_vel = np.zeros(3)
+        self.tick = 0
+        self.control = self.firm.control_t()
+        self.setpoint = self.firm.setpoint_t()
+        self.sensorData = self.firm.sensorData_t()
+        self.state = self.firm.state_t()
+        self.tick = 0
+        self.pwms = [0, 0, 0, 0]
+        self.action = [0, 0, 0, 0]
+        self.command_queue = []
+        self.tumble_counter = 0
+        self.prev_vel = np.array([0, 0, 0])
+        self.prev_rpy = np.array([0, 0, 0])
+        self.prev_time_s = None
+        self.last_pos_pid_call = 0
+        self.last_att_pid_call = 0
+        self._error = False
+        self.sensorData_set = False
+        self.state_set = False
+        self.full_state_cmd_override = True
+        self.acclpf = []
+        self.gyrolpf = []
+
+###############################################################################
 
     def _process_command_queue(self, sim_time):
         if len(self.command_queue) > 0:
@@ -253,9 +292,9 @@ class MellingerControl(BaseControl):
 ###############################################################################
 
     def _update_gyro(self, x, y, z):
-        self.sensorData.gyro.x = self.firm.lpf2pApply(self.gyrolpf[0], x)
-        self.sensorData.gyro.y = self.firm.lpf2pApply(self.gyrolpf[1], y)
-        self.sensorData.gyro.z = self.firm.lpf2pApply(self.gyrolpf[2], z)
+        self.sensorData.gyro.x = self.firm.lpf2pApply(self.gyrolpf[0], float(x))
+        self.sensorData.gyro.y = self.firm.lpf2pApply(self.gyrolpf[1], float(y))
+        self.sensorData.gyro.z = self.firm.lpf2pApply(self.gyrolpf[2], float(z))
 
 ###############################################################################
 
@@ -355,7 +394,7 @@ class MellingerControl(BaseControl):
         if MOTOR_SET_ENABLE:
             self.pwms = motor_pwms
         else:
-            self.pwms = np.clip(motor_pwms, MIN_PWM).tolist()
+            self.pwms = np.clip(motor_pwms, MIN_PWM, MAX_PWM).tolist()
 
 ###############################################################################
 
@@ -400,9 +439,9 @@ class MellingerControl(BaseControl):
 ###############################################################################
 
     def _update_3D_vec(self, point, timestamp, x, y, z):
-        point.x = x
-        point.y = y
-        point.z = z
+        point.x = float(x)
+        point.y = float(y)
+        point.z = float(z)
         point.timestamp = timestamp
 
 ###############################################################################
@@ -431,9 +470,9 @@ class MellingerControl(BaseControl):
 
     def _update_attitude_t(self, attitude_t, timestamp, roll, pitch, yaw):
         attitude_t.timestamp = timestamp
-        attitude_t.roll = roll
-        attitude_t.pitch = -pitch  # Legacy representation in CF firmware
-        attitude_t.yaw = yaw
+        attitude_t.roll = float(roll)
+        attitude_t.pitch = float(-pitch)  # Legacy representation in CF firmware
+        attitude_t.yaw = float(yaw)
 
 # endregion
 
@@ -460,25 +499,25 @@ class MellingerControl(BaseControl):
 ###############################################################################
 
     def _sendFullStateCmd(self, pos, vel, acc, yaw, rpy_rate, timestep):
-        self.setpoint.position.x = pos[0]
-        self.setpoint.position.y = pos[1]
-        self.setpoint.position.z = pos[2]
-        self.setpoint.velocity.x = vel[0]
-        self.setpoint.velocity.y = vel[1]
-        self.setpoint.velocity.z = vel[2]
-        self.setpoint.acceleration.x = acc[0]
-        self.setpoint.acceleration.y = acc[1]
-        self.setpoint.acceleration.z = acc[2]
+        self.setpoint.position.x = float(pos[0])
+        self.setpoint.position.y = float(pos[1])
+        self.setpoint.position.z = float(pos[2])
+        self.setpoint.velocity.x = float(vel[0])
+        self.setpoint.velocity.y = float(vel[1])
+        self.setpoint.velocity.z = float(vel[2])
+        self.setpoint.acceleration.x = float(acc[0])
+        self.setpoint.acceleration.y = float(acc[1])
+        self.setpoint.acceleration.z = float(acc[2])
 
-        self.setpoint.attitudeRate.roll = rpy_rate[0] * RAD_TO_DEG
-        self.setpoint.attitudeRate.pitch = rpy_rate[1] * RAD_TO_DEG
-        self.setpoint.attitudeRate.yaw = rpy_rate[2] * RAD_TO_DEG
+        self.setpoint.attitudeRate.roll = float(rpy_rate[0]) * RAD_TO_DEG
+        self.setpoint.attitudeRate.pitch = float(rpy_rate[1]) * RAD_TO_DEG
+        self.setpoint.attitudeRate.yaw = float(rpy_rate[2]) * RAD_TO_DEG
 
         quat = get_quaternion_from_euler(0, 0, yaw)
-        self.setpoint.attitudeQuaternion.x = quat[0]
-        self.setpoint.attitudeQuaternion.y = quat[1]
-        self.setpoint.attitudeQuaternion.z = quat[2]
-        self.setpoint.attitudeQuaternion.w = quat[3]
+        self.setpoint.attitudeQuaternion.x = float(quat[0])
+        self.setpoint.attitudeQuaternion.y = float(quat[1])
+        self.setpoint.attitudeQuaternion.z = float(quat[2])
+        self.setpoint.attitudeQuaternion.w = float(quat[3])
 
         # initilize setpoint modes to match cmdFullState
         self.setpoint.mode.x = self.firm.modeAbs

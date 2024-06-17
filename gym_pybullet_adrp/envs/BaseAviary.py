@@ -19,7 +19,7 @@ class BaseAviary(gym.Env):
     """Base class for "drone aviary" Gym environments."""
 
     # metadata = {'render.modes': ['human']}
-    
+
     ################################################################################
 
     def __init__(self,
@@ -209,7 +209,7 @@ class BaseAviary(gym.Env):
         self.action_space = self._actionSpace()
         self.observation_space = self._observationSpace()
         #### Housekeeping ##########################################
-        self._housekeeping()
+        self._housekeeping() # NOTE: this resets twice before the first episode...
         #### Update and store the drones kinematic information #####
         self._updateAndStoreKinematicInformation()
         #### Start video recording #################################
