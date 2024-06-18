@@ -9,9 +9,10 @@ from pathlib import Path
 
 import yaml
 import numpy as np
+import pybullet as pb
 from munch import Munch, munchify
 
-from gym_pybullet_adrp.utils.constants import FIRMWARE_PATH
+from gym_pybullet_adrp.utils.constants import FIRMWARE_PATH, URDF_DIR
 
 
 ################################################################################
@@ -90,7 +91,7 @@ def str2bool(val):
     else:
         raise argparse.ArgumentTypeError("[ERROR] in str2bool(), a Boolean value is expected")
 
-################################################################################
+###############################################################################
 
 def load_config(path: str | Path) -> Munch:
     """Load the race config file.
@@ -107,9 +108,9 @@ def load_config(path: str | Path) -> Munch:
     with open(path, "r", encoding="utf-8") as file:
         return munchify(yaml.safe_load(file))
 
-################################################################################
+###############################################################################
 
-def load_controller(path: str | Path, class_name: str="BaseController"):
+def load_controller(path: str | Path, class_name: str=None):
     """Load the controller module from the given path and return the Controller class.
 
     Args:
@@ -119,6 +120,9 @@ def load_controller(path: str | Path, class_name: str="BaseController"):
         path = Path(path)
     assert path.exists(), f"Controller file not found: {path}"
     assert path.is_file(), f"Controller path is not a file: {path}"
+    if not class_name:
+        class_name = path.name.split(".")[0]
+        print(class_name)
     spec = importlib.util.spec_from_file_location("controller", path)
     controller_module = importlib.util.module_from_spec(spec)
     sys.modules["controller"] = controller_module
@@ -131,7 +135,7 @@ def load_controller(path: str | Path, class_name: str="BaseController"):
     except ImportError as e:
         raise e
 
-################################################################################
+###############################################################################
 
 def load_firmware(path_to_repos: str | Path):
     """Load an individual version of the crazyflie firmware c bindings."""
@@ -146,3 +150,36 @@ def load_firmware(path_to_repos: str | Path):
     spec.loader.exec_module(firmware)
 
     return firmware
+
+###############################################################################
+
+def draw_trajectory(
+    initial_info: dict,
+    waypoints: np.ndarray,
+    ref_x: np.ndarray,
+    ref_y: np.ndarray,
+    ref_z: np.ndarray,
+):
+    """Draw a trajectory in PyBullet's GUI."""
+    for point in waypoints:
+        urdf_path = Path(URDF_DIR) / "sphere.urdf"
+        pb.loadURDF(
+            str(urdf_path),
+            [point[0], point[1], point[2]],
+            pb.getQuaternionFromEuler([0, 0, 0]),
+            physicsClientId=initial_info["pyb_client"],
+        )
+    step = int(ref_x.shape[0] / 50)
+    for i in range(step, ref_x.shape[0], step):
+        pb.addUserDebugLine(
+            lineFromXYZ=[ref_x[i - step], ref_y[i - step], ref_z[i - step]],
+            lineToXYZ=[ref_x[i], ref_y[i], ref_z[i]],
+            lineColorRGB=[1, 0, 0],
+            physicsClientId=initial_info["pyb_client"],
+        )
+    pb.addUserDebugLine(
+        lineFromXYZ=[ref_x[i], ref_y[i], ref_z[i]],
+        lineToXYZ=[ref_x[-1], ref_y[-1], ref_z[-1]],
+        lineColorRGB=[1, 0, 0],
+        physicsClientId=initial_info["pyb_client"],
+    )

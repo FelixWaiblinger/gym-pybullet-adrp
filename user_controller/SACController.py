@@ -1,12 +1,15 @@
-"""Controller"""
-
-from abc import ABC, abstractmethod
-from collections import deque
+"""SACController"""
 
 import numpy as np
+from stable_baselines3 import SAC
+
+from user_controller import BaseController
 
 
-class BaseController(ABC):
+AGENT_PATH = "./sac_agent"
+
+
+class SACController(BaseController):
     """Base class for control.
 
     Implements `__init__()`, `reset(), and interface `computeControlFromState()`,
@@ -17,8 +20,8 @@ class BaseController(ABC):
 
     def __init__(self,
         drone_id: int,
-        initial_obs: np.ndarray=None,
-        initial_info: dict=None,
+        initial_obs: np.ndarray,
+        initial_info: dict,
         buffer_size: int=100,
         verbose: bool=False
     ):
@@ -31,37 +34,22 @@ class BaseController(ABC):
         g : float, optional
             The gravitational acceleration in m/s^2.
         """
-
-        self.drone_id = drone_id
-        self.initial_obs = initial_obs
-        self.initial_info = initial_info
-        self.buffer_size = buffer_size
-        self.verbose = verbose
-
-        self.action_buffer = deque([], maxlen=buffer_size)
-        self.obs_buffer = deque([], maxlen=buffer_size)
-        self.reward_buffer = deque([], maxlen=buffer_size)
-        self.done_buffer = deque([], maxlen=buffer_size)
-        self.info_buffer = deque([], maxlen=buffer_size)
-
-        self.reset()
-        self.episode_reset()
+        super().__init__(drone_id, initial_obs, initial_info, buffer_size, verbose)
+        self.agent = SAC.load(AGENT_PATH)
+        # NOTE: anything else to do here?
 
 ###############################################################################
 
     def reset(self):
         """Initialize/reset data buffers and counters."""
-        self.action_buffer = deque([], maxlen=self.buffer_size)
-        self.obs_buffer = deque([], maxlen=self.buffer_size)
-        self.reward_buffer = deque([], maxlen=self.buffer_size)
-        self.done_buffer = deque([], maxlen=self.buffer_size)
-        self.info_buffer = deque([], maxlen=self.buffer_size)
+        super().reset()
+        # NOTE: anything else to do here?
 
 ###############################################################################
 
     def episode_reset(self):
         """Reset the controller's internal state and models if necessary."""
-        # NOTE: can be implemented by its subclasses
+        # NOTE: anything else to do here?
 
 ###############################################################################
 
@@ -87,14 +75,8 @@ class BaseController(ABC):
             info: Most recent information dictionary.
 
         """
-        # Store the last step's events.
-        self.action_buffer.append(action)
-        self.obs_buffer.append(obs)
-        self.reward_buffer.append(reward)
-        self.done_buffer.append(done)
-        self.info_buffer.append(info)
-
-        # NOTE: can be implemented by its subclasses
+        super().step_learn(action, obs, reward, done, info)
+        # NOTE: anything else to do here?
 
 ###############################################################################
 
@@ -106,11 +88,10 @@ class BaseController(ABC):
             observations, rewards, done flags, and information dictionaries to learn, adapt, and/or
             re-plan.s
         """
-        # NOTE: can be implemented by its subclasses
+        # NOTE: anything else to do here?
 
 ###############################################################################
 
-    @abstractmethod
     def predict(self,
         obs: np.ndarray,
         reward: float=None,
@@ -119,3 +100,4 @@ class BaseController(ABC):
         ep_time: float=None
     ) -> np.ndarray:
         """Predict the next action."""
+        return self.agent.predict(obs)[0].astype(np.float32)

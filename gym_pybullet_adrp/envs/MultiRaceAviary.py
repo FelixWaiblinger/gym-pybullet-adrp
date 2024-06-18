@@ -241,6 +241,7 @@ class MultiRaceAviary(BaseAviary):
                 (act[:3], VEC3_ZERO, VEC3_ZERO, act[3], VEC3_ZERO, self.step_counter)
             ) for act in action]
 
+        print(action)
         self._send_commands(action)
 
         # Repeat for as many as the aggregate physics steps
@@ -265,6 +266,9 @@ class MultiRaceAviary(BaseAviary):
                     VEC3_ZERO,
                     VEC3_ZERO
                 )[0]
+
+            # TODO debugging
+            print(clipped_action)
 
             # Step the simulation using the desired physics update
             self._apply_physics(clipped_action)
@@ -355,6 +359,8 @@ class MultiRaceAviary(BaseAviary):
 
         Overrides BaseAviary's method.
         """
+        self.gates_urdf, self.gates_actual = [], []
+        self.obstacles_urdf, self.obstacles_actual = [], []
         self.gates_nominal = [g[:-1] for g in self.config.gates]
         self.obstacles_nominal = self.config.obstacles
         num_gates = len(self.gates_nominal)
@@ -417,7 +423,7 @@ class MultiRaceAviary(BaseAviary):
             x, y, _, _, _, rot = self.gates_actual[current_gate]
             if self.config.gates[current_gate][6] == 0: # TODO
                 height = Z_HIGH  # URDF dependent.
-            elif self.config.gates[self.current_gate][6] == 1:
+            elif self.config.gates[current_gate][6] == 1:
                 height = Z_LOW  # URDF dependent.
             else:
                 raise ValueError("Unknown gate type.")
@@ -472,16 +478,22 @@ class MultiRaceAviary(BaseAviary):
                 mellinger.sendFullStateCmd(*args)
             elif command == Command.TAKEOFF:
                 mellinger.sendTakeoffCmd(*args)
-            elif command == Command.TAKEOFF:
-                mellinger.sendTakeoffCmd(*args)
-            elif command == Command.TAKEOFF:
-                mellinger.sendTakeoffCmd(*args)
-            elif command == Command.TAKEOFF:
-                mellinger.sendTakeoffCmd(*args)
-            elif command == Command.TAKEOFF:
-                mellinger.sendTakeoffCmd(*args)
-            elif command == Command.TAKEOFF:
-                mellinger.sendTakeoffCmd(*args)
+            elif command == Command.TAKEOFFYAW:
+                mellinger.sendTakeoffYawCmd(*args)
+            elif command == Command.TAKEOFFVEL:
+                mellinger.sendTakeoffVelCmd(*args)
+            elif command == Command.LAND:
+                mellinger.sendLandCmd(*args)
+            elif command == Command.LANDYAW:
+                mellinger.sendLandYawCmd(*args)
+            elif command == Command.LANDVEL:
+                mellinger.sendLandVelCmd(*args)
+            elif command == Command.GOTO:
+                mellinger.sendGotoCmd(*args)
+            elif command == Command.STOP:
+                mellinger.sendStopCmd(*args)
+            elif command == Command.NOTIFY:
+                mellinger.notifySetpointStop(*args)
 
             mellinger._process_command_queue(args[-1])
 
@@ -554,20 +566,6 @@ class MultiRaceAviary(BaseAviary):
                 )
                 rpm[k,:] = temp
 
-            elif self.action_type == ActionType.ONE_D_RPM:
-                rpm[k,:] = np.repeat(self.HOVER_RPM * (1+0.05*target), 4)
-
-            elif self.action_type == ActionType.ONE_D_PID:
-                state = self._getDroneStateVector(k)
-                res, _, _ = self.ctrl[k].computeControl(
-                    control_timestep=self.CTRL_TIMESTEP,
-                    cur_pos=state[0:3],
-                    cur_rpy=state[3:6],
-                    cur_vel=state[6:9],
-                    cur_ang_vel=state[9:12],
-                    target_pos=state[0:3]+0.1*np.array([0,0,target[0]])
-                )
-                rpm[k,:] = res
         return rpm
 
 ###############################################################################
@@ -638,10 +636,10 @@ class MultiRaceAviary(BaseAviary):
                         physicsClientId=self.CLIENT,
                     )
                     if len(closest_points) > 0:
-                        gate_poses[j] = np.array(self.gates_actual[j])[[0,1,2,5]]
+                        gate_poses[j] = np.array(self.gates_actual)[j, [0,1,2,5]]
                         gate_range[j] = True
                     else:
-                        gate_poses[j] = np.array(self.gates_nominal[j])[[0,1,2,5]]
+                        gate_poses[j] = np.array(self.gates_nominal)[j, [0,1,2,5]]
                         gate_range[j] = False
 
                 # obstacle observations
@@ -706,6 +704,9 @@ class MultiRaceAviary(BaseAviary):
             out_of_bounds = np.any(np.abs(state[:3]) > self.env_bounds)
             unstable = np.any(np.abs(state[13:16]) > 10) # TODO replace arbitrary theshold
             crashed = self._collision(i) is not None
+
+            # TODO debugging
+            print(f"{out_of_bounds = }, {unstable = }, {crashed = }")
 
             self.drones_eliminated[i] = out_of_bounds or unstable or crashed
 

@@ -15,7 +15,7 @@ from user_controller import BaseController
 
 def simulate(
     config: str="config/getting_started.yaml",
-    controller: str | List[str]="user_controller/BaseController.py",
+    controller: str | List[str]="user_controller/HoverController.py",
     n_runs: int=1,
     n_drones: int=2,
     gui: bool=True,
@@ -73,6 +73,7 @@ def simulate(
 
             # select an action for each agent
             actions = np.vstack([a.predict(obs) for a in agents])
+            print(actions)
 
             # perform one step in the environment
             obs, reward, terminated, truncated, _ = env.step(actions)
@@ -85,6 +86,9 @@ def simulate(
             episode_step += 1
 
         stats["episode_times"][run] = sim_time
+
+        # TODO debugging
+        print(f"{terminated = }, {truncated = }")
 
     env.close()
 
