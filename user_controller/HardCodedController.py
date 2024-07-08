@@ -8,12 +8,11 @@ from scipy import interpolate
 from user_controller import BaseController
 from gym_pybullet_adrp.utils import draw_trajectory
 from gym_pybullet_adrp.utils.enums import Command
+from gym_pybullet_adrp.utils.constants import Z_LOW, Z_HIGH, CTRL_FREQ, CTRL_DT
 
 
 class HardCodedController(BaseController):
     """Template controller class."""
-
-    # TODO: needs a slight rework as gates etc are now in observations instead of info
 
 ###############################################################################
 
@@ -43,15 +42,15 @@ class HardCodedController(BaseController):
         """
         super().__init__(drone_id, initial_obs, initial_info, buffer_size, verbose)
         # Save environment and control parameters.
-        self.CTRL_TIMESTEP = initial_info["ctrl_timestep"]
-        self.CTRL_FREQ = initial_info["ctrl_freq"]
+        self.CTRL_TIMESTEP = CTRL_DT # NOTE: changed
+        self.CTRL_FREQ = CTRL_FREQ # NOTE: changed
         self.initial_obs = initial_obs
         self.VERBOSE = verbose
         self.BUFFER_SIZE = buffer_size
 
         # Store a priori scenario information.
-        self.NOMINAL_GATES = initial_info["nominal_gates_pos_and_type"]
-        self.NOMINAL_OBSTACLES = initial_info["nominal_obstacles_pos"]
+        self.NOMINAL_GATES = initial_obs[12:28] # NOTE: changed
+        self.NOMINAL_OBSTACLES = initial_obs[32:44] # NOTE: changed
 
         # Reset counters and buffers.
         self.reset()
@@ -63,8 +62,8 @@ class HardCodedController(BaseController):
         waypoints = []
         waypoints.append([self.initial_obs[0], self.initial_obs[1], 0.3])
         gates = self.NOMINAL_GATES
-        z_low = initial_info["gate_dimensions"]["low"]["height"]
-        z_high = initial_info["gate_dimensions"]["tall"]["height"]
+        z_low = Z_LOW # NOTE: changed
+        z_high = Z_HIGH # NOTE: changed
         waypoints.append([1, 0, z_low])
         waypoints.append([gates[0][0] + 0.2, gates[0][1] + 0.1, z_low])
         waypoints.append([gates[0][0] + 0.1, gates[0][1], z_low])

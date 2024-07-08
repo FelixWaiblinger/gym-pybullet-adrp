@@ -7,9 +7,10 @@ import pybullet as pb
 from munch import Munch
 from gymnasium import spaces
 from PIL import Image
+from scipy.spatial.transform import Rotation as R
 
 from gym_pybullet_adrp.envs.BaseAviary import BaseAviary
-from gym_pybullet_adrp.control import MellingerControl
+from gym_pybullet_adrp.control import MellingerControl, DSLPIDControl
 from gym_pybullet_adrp.utils.enums import \
     DroneModel, Physics, ActionType, ObservationType, ImageType, Command
 from gym_pybullet_adrp.utils.constants import *
@@ -39,6 +40,7 @@ class MultiRaceAviary(BaseAviary):
         ctrl_freq: int=CTRL_FREQ,
         gui: bool=False,
         record: bool=False,
+        drone_collisions: bool=False,
         obs: ObservationType=ObservationType.KIN,
         act: ActionType=ActionType.PID
     ):
@@ -74,6 +76,7 @@ class MultiRaceAviary(BaseAviary):
         self.config = race_config
         self.observation_type = obs
         self.action_type = act
+        self.drone_collisions = drone_collisions
         self.gates_urdf, self.obstacles_urdf = [], []
         self.gates_nominal, self.obstacles_nominal = [], []
         self.gates_actual, self.obstacles_actual = [], []
@@ -97,9 +100,10 @@ class MultiRaceAviary(BaseAviary):
             f"DroneModel {drone_model} not supported in MultiRaceAviary!"
 
         self.ctrl = [MellingerControl(i, DroneModel.CF2X) for i in range(num_drones)]
+        # self.ctrl = [DSLPIDControl(DroneModel.CF2X) for i in range(num_drones)]
 
-        assert self.ctrl[0].firm is not self.ctrl[1].firm, \
-            "Controllers are the same!"
+        # assert self.ctrl[0].firm is not self.ctrl[1].firm, \
+        #     "Controllers are the same!"
 
         self.env_bounds = np.array([3, 3, 2]) # as stated in drone racing paper
         self.drones_eliminated = np.zeros(num_drones, dtype=bool)
@@ -182,60 +186,60 @@ class MultiRaceAviary(BaseAviary):
             implementation of `_computeInfo()` in each subclass for its format.
 
         """
-        # Save PNG video frames if RECORD=True and GUI=False
-        if self.RECORD and not self.GUI and self.step_counter%self.CAPTURE_FREQ == 0:
-            [w, h, rgb, dep, seg] = pb.getCameraImage(
-                width=self.VID_WIDTH,
-                height=self.VID_HEIGHT,
-                shadow=1,
-                viewMatrix=self.CAM_VIEW,
-                projectionMatrix=self.CAM_PRO,
-                renderer=pb.ER_TINY_RENDERER,
-                flags=pb.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX,
-                physicsClientId=self.CLIENT
-            )
-            (Image.fromarray(np.reshape(rgb, (h, w, 4)), 'RGBA')).save(os.path.join(self.IMG_PATH, "frame_"+str(self.FRAME_NUM)+".png"))
-            #### Save the depth or segmentation view instead #######
-            # dep = ((dep-np.min(dep)) * 255 / (np.max(dep)-np.min(dep))).astype('uint8')
-            # (Image.fromarray(np.reshape(dep, (h, w)))).save(self.IMG_PATH+"frame_"+str(self.FRAME_NUM)+".png")
-            # seg = ((seg-np.min(seg)) * 255 / (np.max(seg)-np.min(seg))).astype('uint8')
-            # (Image.fromarray(np.reshape(seg, (h, w)))).save(self.IMG_PATH+"frame_"+str(self.FRAME_NUM)+".png")
-            self.FRAME_NUM += 1
-            if self.VISION_ATTR:
-                for i in range(self.NUM_DRONES):
-                    self.rgb[i], self.dep[i], self.seg[i] = self._getDroneImages(i)
-                    #### Printing observation to PNG frames example ############
-                    self._exportImage(img_type=ImageType.RGB, # ImageType.BW, ImageType.DEP, ImageType.SEG
-                                    img_input=self.rgb[i],
-                                    path=self.ONBOARD_IMG_PATH+"/drone_"+str(i)+"/",
-                                    frame_num=int(self.step_counter/self.IMG_CAPTURE_FREQ)
-                                    )
+        # # Save PNG video frames if RECORD=True and GUI=False
+        # if self.RECORD and not self.GUI and self.step_counter%self.CAPTURE_FREQ == 0:
+        #     [w, h, rgb, dep, seg] = pb.getCameraImage(
+        #         width=self.VID_WIDTH,
+        #         height=self.VID_HEIGHT,
+        #         shadow=1,
+        #         viewMatrix=self.CAM_VIEW,
+        #         projectionMatrix=self.CAM_PRO,
+        #         renderer=pb.ER_TINY_RENDERER,
+        #         flags=pb.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX,
+        #         physicsClientId=self.CLIENT
+        #     )
+        #     (Image.fromarray(np.reshape(rgb, (h, w, 4)), 'RGBA')).save(os.path.join(self.IMG_PATH, "frame_"+str(self.FRAME_NUM)+".png"))
+        #     #### Save the depth or segmentation view instead #######
+        #     # dep = ((dep-np.min(dep)) * 255 / (np.max(dep)-np.min(dep))).astype('uint8')
+        #     # (Image.fromarray(np.reshape(dep, (h, w)))).save(self.IMG_PATH+"frame_"+str(self.FRAME_NUM)+".png")
+        #     # seg = ((seg-np.min(seg)) * 255 / (np.max(seg)-np.min(seg))).astype('uint8')
+        #     # (Image.fromarray(np.reshape(seg, (h, w)))).save(self.IMG_PATH+"frame_"+str(self.FRAME_NUM)+".png")
+        #     self.FRAME_NUM += 1
+        #     if self.VISION_ATTR:
+        #         for i in range(self.NUM_DRONES):
+        #             self.rgb[i], self.dep[i], self.seg[i] = self._getDroneImages(i)
+        #             #### Printing observation to PNG frames example ############
+        #             self._exportImage(img_type=ImageType.RGB, # ImageType.BW, ImageType.DEP, ImageType.SEG
+        #                             img_input=self.rgb[i],
+        #                             path=self.ONBOARD_IMG_PATH+"/drone_"+str(i)+"/",
+        #                             frame_num=int(self.step_counter/self.IMG_CAPTURE_FREQ)
+        #                             )
 
-        # Read the GUI's input parameters
-        if self.GUI and self.USER_DEBUG:
-            current_input_switch = pb.readUserDebugParameter(self.INPUT_SWITCH, physicsClientId=self.CLIENT)
-            if current_input_switch > self.last_input_switch:
-                self.last_input_switch = current_input_switch
-                self.USE_GUI_RPM = True if self.USE_GUI_RPM == False else False
+        # # Read the GUI's input parameters
+        # if self.GUI and self.USER_DEBUG:
+        #     current_input_switch = pb.readUserDebugParameter(self.INPUT_SWITCH, physicsClientId=self.CLIENT)
+        #     if current_input_switch > self.last_input_switch:
+        #         self.last_input_switch = current_input_switch
+        #         self.USE_GUI_RPM = True if self.USE_GUI_RPM == False else False
 
-        if self.USE_GUI_RPM:
-            for i in range(4):
-                self.gui_input[i] = pb.readUserDebugParameter(int(self.SLIDERS[i]), physicsClientId=self.CLIENT)
-            clipped_action = np.tile(self.gui_input, (self.NUM_DRONES, 1))
-            if self.step_counter%(self.PYB_FREQ/2) == 0:
-                self.GUI_INPUT_TEXT = [pb.addUserDebugText("Using GUI RPM",
-                                                          textPosition=[0, 0, 0],
-                                                          textColorRGB=[1, 0, 0],
-                                                          lifeTime=1,
-                                                          textSize=2,
-                                                          parentObjectUniqueId=self.DRONE_IDS[i],
-                                                          parentLinkIndex=-1,
-                                                          replaceItemUniqueId=int(self.GUI_INPUT_TEXT[i]),
-                                                          physicsClientId=self.CLIENT
-                                                          ) for i in range(self.NUM_DRONES)]
+        # if self.USE_GUI_RPM:
+        #     for i in range(4):
+        #         self.gui_input[i] = pb.readUserDebugParameter(int(self.SLIDERS[i]), physicsClientId=self.CLIENT)
+        #     clipped_action = np.tile(self.gui_input, (self.NUM_DRONES, 1))
+        #     if self.step_counter%(self.PYB_FREQ/2) == 0:
+        #         self.GUI_INPUT_TEXT = [pb.addUserDebugText("Using GUI RPM",
+        #                                                   textPosition=[0, 0, 0],
+        #                                                   textColorRGB=[1, 0, 0],
+        #                                                   lifeTime=1,
+        #                                                   textSize=2,
+        #                                                   parentObjectUniqueId=self.DRONE_IDS[i],
+        #                                                   parentLinkIndex=-1,
+        #                                                   replaceItemUniqueId=int(self.GUI_INPUT_TEXT[i]),
+        #                                                   physicsClientId=self.CLIENT
+        #                                                   ) for i in range(self.NUM_DRONES)]
 
         # Save, preprocess, and clip the action to the max. RPM
-        elif isinstance(action, np.ndarray):
+        if isinstance(action, np.ndarray):
             action = [(
                 Command.FULLSTATE,
                 (act[:3], VEC3_ZERO, VEC3_ZERO, act[3], VEC3_ZERO, self.step_counter)
@@ -295,6 +299,12 @@ class MultiRaceAviary(BaseAviary):
         self.previous_pos = obs[:, :3]
         self.previous_rpy = obs[:, 3:6]
         self.previous_vel = obs[:, 6:9]
+
+        # TODO debugging
+        # for c in self.ctrl:
+        #     print(c.control)
+        #     print(c.command_queue)
+        #     print(id(c.firm))
         return obs, reward, terminated, truncated, info
 
 ###############################################################################
@@ -361,7 +371,7 @@ class MultiRaceAviary(BaseAviary):
         """
         self.gates_urdf, self.gates_actual = [], []
         self.obstacles_urdf, self.obstacles_actual = [], []
-        self.gates_nominal = [g[:-1] for g in self.config.gates]
+        self.gates_nominal = [g[:6] for g in self.config.gates]
         self.obstacles_nominal = self.config.obstacles
         num_gates = len(self.gates_nominal)
         num_obstacles = len(self.obstacles_nominal)
@@ -374,7 +384,7 @@ class MultiRaceAviary(BaseAviary):
             g_offsets = g_distrib(g_low, g_high, size=(num_gates, 3))
             for n, o in zip(self.gates_nominal, g_offsets):
                 temp = np.array(n)
-                temp[0, 1, 5] += o
+                temp[[0, 1, 5]] += o
                 self.gates_actual.append(temp.tolist())
 
             # randomly offset position of obstacles
@@ -384,15 +394,16 @@ class MultiRaceAviary(BaseAviary):
             o_offsets = o_distrib(o_low, o_high, size=(num_obstacles, 2))
             for n, o in zip(self.obstacles_nominal, o_offsets):
                 temp = np.array(n)
-                temp[0, 1] += o
+                temp[[0, 1]] += o
                 self.obstacles_actual.append(temp.tolist())
 
         # no randomization of gates and obstacles
         else:
             self.gates_actual = self.gates_nominal
+            self.obstacles_actual = self.obstacles_nominal
 
         # spawn gates
-        for g in self.gates_actual:
+        for g in self.config.gates:
             self.gates_urdf.append(pb.loadURDF(
                 URDF_DIR + ("low_portal.urdf" if g[-1] > 0 else "portal.urdf"),
                 g[:3],
@@ -401,8 +412,7 @@ class MultiRaceAviary(BaseAviary):
             ))
 
         # spawn obstacles
-        obstacle_init = np.array(self.config.obstacles)
-        for o in obstacle_init:
+        for o in self.obstacles_actual:
             self.obstacles_urdf.append(pb.loadURDF(
                 URDF_DIR + "obstacle.urdf",
                 o[:3],
@@ -571,13 +581,19 @@ class MultiRaceAviary(BaseAviary):
 ###############################################################################
 
     def _collision(self, drone_id: int):
-        for obj_id in self.gates_urdf + self.obstacles_urdf + [self.PLANE_ID]:
+        objects = self.gates_urdf + self.obstacles_urdf + [self.PLANE_ID]
+        if self.drone_collisions:
+            objects += [d for i, d in enumerate(self.DRONE_IDS) if i != drone_id]
+
+        print(objects)
+        for obj_id in objects:
             # NOTE: only returning the first collision per step
             if pb.getContactPoints(
                 bodyA=obj_id,
-                bodyB=drone_id,
+                bodyB=self.DRONE_IDS[drone_id],
                 physicsClientId=self.CLIENT,
             ):
+                print(f"collided with {obj_id}")
                 return obj_id
 
         return None
@@ -702,7 +718,9 @@ class MultiRaceAviary(BaseAviary):
             state = self._getDroneStateVector(i)
 
             out_of_bounds = np.any(np.abs(state[:3]) > self.env_bounds)
-            unstable = np.any(np.abs(state[13:16]) > 10) # TODO replace arbitrary theshold
+            print("Unstable: ", np.abs(state[13:16]))
+            # unstable = np.any(np.abs(state[13:16]) > 20) # TODO replace arbitrary theshold
+            unstable = False
             crashed = self._collision(i) is not None
 
             # TODO debugging

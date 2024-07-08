@@ -218,7 +218,8 @@ class MellingerControl(BaseControl):
         self.control_counter += 1
 
         clipped_pwms = np.clip(np.array(self.pwms), MIN_PWM, MAX_PWM)
-        rpms = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
+        # rpms = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
+        rpms = PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST
         rpms = rpms[[3, 2, 1, 0]]
 
         return rpms, None, None
@@ -229,6 +230,7 @@ class MellingerControl(BaseControl):
 
     def _init_variables(self):
         # self.KF = self._getURDFParameter('kf')
+        # self.KF = 5.5e-5 # NOTE: taken from 
         self.KF = 3.16e-10 # NOTE: taken from safe-control-gym.firmware_wrapper
         self.KM = self._getURDFParameter('km')
         self.control_counter = 0

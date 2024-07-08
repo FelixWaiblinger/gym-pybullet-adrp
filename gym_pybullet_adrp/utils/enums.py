@@ -67,3 +67,12 @@ class Command(Enum):
     STOP = "stp"
     GOTO = "gto"
     NOTIFY = "ntf"
+
+
+class State(Enum):
+    """State machine controlled behaviour states"""
+    INIT = 0
+    TAKEOFF = 1
+    CONTROL = 2
+    LAND = 3
+    END = 4

@@ -16,7 +16,7 @@ from user_controller import BaseController
 def simulate(
     config: str="config/getting_started.yaml",
     controller: str | List[str]="user_controller/HoverController.py",
-    n_runs: int=1,
+    n_runs: int=100,
     n_drones: int=2,
     gui: bool=True,
 ) -> list[float]:
@@ -35,13 +35,13 @@ def simulate(
     config = load_config(config)
 
     # create race environment
-    env = gym.make("multi-race-aviary-v0", race_config=config, gui=gui)
+    env = gym.make("multi-race-aviary-v0", race_config=config, num_drones=n_drones, gui=gui)
     gui_timer = pb.addUserDebugText("", np.ones(3), physicsClientId=env.CLIENT)
 
     # initialize drone agents
+    agents: List[BaseController] = []
     if isinstance(controller, str):
         controller = [controller] * n_drones
-    agents: List[BaseController] = []
     for drone_id, c in enumerate(controller):
         agents.append(load_controller(c)(drone_id))
 
@@ -73,7 +73,7 @@ def simulate(
 
             # select an action for each agent
             actions = np.vstack([a.predict(obs) for a in agents])
-            print(actions)
+            # print(actions)
 
             # perform one step in the environment
             obs, reward, terminated, truncated, _ = env.step(actions)
