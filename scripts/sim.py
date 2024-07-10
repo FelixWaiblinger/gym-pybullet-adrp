@@ -16,7 +16,7 @@ from user_controller import BaseController
 def simulate(
     config: str="config/getting_started.yaml",
     controller: str | List[str]="user_controller/HoverController.py",
-    n_runs: int=100,
+    n_runs: int=10,
     n_drones: int=2,
     gui: bool=True,
 ) -> list[float]:
@@ -72,7 +72,7 @@ def simulate(
             )
 
             # select an action for each agent
-            actions = np.vstack([a.predict(obs) for a in agents])
+            actions = np.vstack([a.predict(obs[i]) for i, a in enumerate(agents)])
             # print(actions)
 
             # perform one step in the environment

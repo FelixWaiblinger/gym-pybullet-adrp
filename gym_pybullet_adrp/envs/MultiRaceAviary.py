@@ -551,9 +551,9 @@ class MultiRaceAviary(BaseAviary):
                 rpm_k, _, _ = self.ctrl[k].computeControl(
                     control_timestep=self.CTRL_TIMESTEP,
                     cur_pos=state[0:3],
-                    cur_rpy=state[3:6],
-                    cur_vel=state[6:9],
-                    cur_ang_vel=state[9:12],
+                    cur_rpy=state[7:10],
+                    cur_vel=state[10:13],
+                    cur_ang_vel=state[13:16],
                     target_pos=next_pos
                 )
                 rpm[k,:] = rpm_k

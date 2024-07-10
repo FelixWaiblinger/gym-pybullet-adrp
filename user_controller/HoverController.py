@@ -22,4 +22,4 @@ class HoverController(BaseController):
         ep_time: float=None
     ) -> np.ndarray:
         """Predict the next action."""
-        return np.array([0, 0, 1 + self.drone_id, 0], dtype=np.float32)
+        return np.array([obs[0], obs[1], 1 + self.drone_id, 0], dtype=np.float32)

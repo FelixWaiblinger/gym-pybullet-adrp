@@ -171,6 +171,7 @@ class MellingerControl(BaseControl):
 
         """
         # Get state values from pybullet
+        # body_rot = R.from_quat(cur_rpy_quat)
         body_rot = R.from_euler("XYZ", cur_rpy).inv()
 
         if self.takeoff_sent:
