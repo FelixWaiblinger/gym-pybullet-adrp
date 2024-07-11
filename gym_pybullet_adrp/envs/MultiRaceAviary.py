@@ -1,6 +1,7 @@
 """Drone Racing for multiple drones on one race track"""
 
 import os
+import multiprocessing as mp
 
 import numpy as np
 import pybullet as pb
@@ -10,13 +11,13 @@ from PIL import Image
 from scipy.spatial.transform import Rotation as R
 
 from gym_pybullet_adrp.envs.BaseAviary import BaseAviary
-from gym_pybullet_adrp.control import MellingerControl, DSLPIDControl
+from gym_pybullet_adrp.control import low_level_control
 from gym_pybullet_adrp.utils.enums import \
     DroneModel, Physics, ActionType, ObservationType, ImageType, Command
 from gym_pybullet_adrp.utils.constants import *
 
 
-PHYSICS_WITH_KIN_INFO = [
+KIN_PHYSICS = [
     Physics.DYN,
     Physics.PYB_GND,
     Physics.PYB_DRAG,
@@ -46,7 +47,7 @@ class MultiRaceAviary(BaseAviary):
     ):
         """Initialization of a multi-agent RL environment.
 
-        Using the generic multi-agent RL superclass.
+        Using the generic base aviary superclass.
 
         Parameters
         ----------
@@ -82,6 +83,7 @@ class MultiRaceAviary(BaseAviary):
         self.gates_actual, self.obstacles_actual = [], []
         self.num_gates = len(self.config.gates)
         self.current_gate = np.zeros(num_drones)
+        self.env_bounds = np.array(self.config.bounds) # NOTE: see config
 
         super().__init__(
             drone_model=drone_model,
@@ -99,20 +101,23 @@ class MultiRaceAviary(BaseAviary):
         assert drone_model in [DroneModel.CF2X, DroneModel.CF2P], \
             f"DroneModel {drone_model} not supported in MultiRaceAviary!"
 
-        self.ctrl = [MellingerControl(i, DroneModel.CF2X) for i in range(num_drones)]
-        # self.ctrl = [DSLPIDControl(DroneModel.CF2X) for i in range(num_drones)]
+        self.ctrl = []
+        for drone_id in range(num_drones):
+            parent_conn, child_conn = mp.Pipe()
+            process = mp.Process(
+                target=low_level_control,
+                args=(drone_id, child_conn)
+            )
+            process.start()
+            self.ctrl.append((process, parent_conn))
 
-        # assert self.ctrl[0].firm is not self.ctrl[1].firm, \
-        #     "Controllers are the same!"
-
-        self.env_bounds = np.array([3, 3, 2]) # as stated in drone racing paper
-        self.drones_eliminated = np.zeros(num_drones, dtype=bool)
         self.action_scale = np.array([1, 1, 1, np.pi])
-        self.last_clipped_action = np.zeros((num_drones, 4))
+
         self.step_counter = 0
         self.previous_pos = np.zeros((num_drones, 3))
         self.previous_rpy = np.zeros((num_drones, 3))
         self.previous_vel = np.zeros((num_drones, 3))
+        self.drones_eliminated = np.zeros(num_drones, dtype=bool)
 
 ###############################################################################
 
@@ -128,12 +133,8 @@ class MultiRaceAviary(BaseAviary):
 
         Returns
         -------
-        ndarray | dict[..]
-            The initial observation, check the specific implementation of
-            `_computeObs()` in each subclass for its format.
-        dict[..]
-            Additional information as a dictionary, check the specific
-            implementation of `_computeInfo()` in each subclass for its format.
+        ndarray: Initial observations according to `_computeObs()`
+        dict: Initial additional information according to `_computeInfo()`
         """
         initial_obs, initial_info = super().reset(seed, options)
         self._build_racetrack()
@@ -141,8 +142,9 @@ class MultiRaceAviary(BaseAviary):
         initial_obs = self._computeObs()
 
         # reset mellinger controllers
-        for mellinger in self.ctrl:
-            mellinger.reset(initial_obs, initial_info)
+        for _, connection in self.ctrl:
+            command = ("reset", (initial_obs, initial_info))
+            connection.send(command)
 
         self.drones_eliminated = np.array([False] * self.NUM_DRONES)
         self.step_counter = 0
@@ -165,120 +167,55 @@ class MultiRaceAviary(BaseAviary):
 
         Returns
         -------
-        ndarray | dict[..]
-            The step's observation, check the specific implementation of
-            `_computeObs()` in each subclass for its format.
-        float | dict[..]
-            The step's reward value(s), check the specific implementation of
-            `_computeReward()` in each subclass for its format.
-        bool | dict[..]
-            Whether the current episode is over, check the specific
-            implementation of `_computeTerminated()` in each subclass for its
-            format.
-        bool | dict[..]
-            Whether the current episode is truncated, check the specific
-            implementation of `_computeTruncated()` in each subclass for its
-            format.
-        bool | dict[..]
-            Whether the current episode is trunacted, always false.
-        dict[..]
-            Additional information as a dictionary, check the specific
-            implementation of `_computeInfo()` in each subclass for its format.
-
+        ndarray: Observation according to `_computeObs()`
+        float: Reward value(s) according to `_computeReward()`
+        bool: Whether the current episode is over according to `_computeTerminated()`
+        bool: Whether the current episode is truncated according to `_computeTruncated()`
+        dict: Additional information as a dictionary according to `_computeInfo()`
         """
-        # # Save PNG video frames if RECORD=True and GUI=False
-        # if self.RECORD and not self.GUI and self.step_counter%self.CAPTURE_FREQ == 0:
-        #     [w, h, rgb, dep, seg] = pb.getCameraImage(
-        #         width=self.VID_WIDTH,
-        #         height=self.VID_HEIGHT,
-        #         shadow=1,
-        #         viewMatrix=self.CAM_VIEW,
-        #         projectionMatrix=self.CAM_PRO,
-        #         renderer=pb.ER_TINY_RENDERER,
-        #         flags=pb.ER_SEGMENTATION_MASK_OBJECT_AND_LINKINDEX,
-        #         physicsClientId=self.CLIENT
-        #     )
-        #     (Image.fromarray(np.reshape(rgb, (h, w, 4)), 'RGBA')).save(os.path.join(self.IMG_PATH, "frame_"+str(self.FRAME_NUM)+".png"))
-        #     #### Save the depth or segmentation view instead #######
-        #     # dep = ((dep-np.min(dep)) * 255 / (np.max(dep)-np.min(dep))).astype('uint8')
-        #     # (Image.fromarray(np.reshape(dep, (h, w)))).save(self.IMG_PATH+"frame_"+str(self.FRAME_NUM)+".png")
-        #     # seg = ((seg-np.min(seg)) * 255 / (np.max(seg)-np.min(seg))).astype('uint8')
-        #     # (Image.fromarray(np.reshape(seg, (h, w)))).save(self.IMG_PATH+"frame_"+str(self.FRAME_NUM)+".png")
-        #     self.FRAME_NUM += 1
-        #     if self.VISION_ATTR:
-        #         for i in range(self.NUM_DRONES):
-        #             self.rgb[i], self.dep[i], self.seg[i] = self._getDroneImages(i)
-        #             #### Printing observation to PNG frames example ############
-        #             self._exportImage(img_type=ImageType.RGB, # ImageType.BW, ImageType.DEP, ImageType.SEG
-        #                             img_input=self.rgb[i],
-        #                             path=self.ONBOARD_IMG_PATH+"/drone_"+str(i)+"/",
-        #                             frame_num=int(self.step_counter/self.IMG_CAPTURE_FREQ)
-        #                             )
 
-        # # Read the GUI's input parameters
-        # if self.GUI and self.USER_DEBUG:
-        #     current_input_switch = pb.readUserDebugParameter(self.INPUT_SWITCH, physicsClientId=self.CLIENT)
-        #     if current_input_switch > self.last_input_switch:
-        #         self.last_input_switch = current_input_switch
-        #         self.USE_GUI_RPM = True if self.USE_GUI_RPM == False else False
-
-        # if self.USE_GUI_RPM:
-        #     for i in range(4):
-        #         self.gui_input[i] = pb.readUserDebugParameter(int(self.SLIDERS[i]), physicsClientId=self.CLIENT)
-        #     clipped_action = np.tile(self.gui_input, (self.NUM_DRONES, 1))
-        #     if self.step_counter%(self.PYB_FREQ/2) == 0:
-        #         self.GUI_INPUT_TEXT = [pb.addUserDebugText("Using GUI RPM",
-        #                                                   textPosition=[0, 0, 0],
-        #                                                   textColorRGB=[1, 0, 0],
-        #                                                   lifeTime=1,
-        #                                                   textSize=2,
-        #                                                   parentObjectUniqueId=self.DRONE_IDS[i],
-        #                                                   parentLinkIndex=-1,
-        #                                                   replaceItemUniqueId=int(self.GUI_INPUT_TEXT[i]),
-        #                                                   physicsClientId=self.CLIENT
-        #                                                   ) for i in range(self.NUM_DRONES)]
-
-        # Save, preprocess, and clip the action to the max. RPM
+        # convert numpy actions to fullstate commands
         if isinstance(action, np.ndarray):
             action = [(
                 Command.FULLSTATE,
                 (act[:3], VEC3_ZERO, VEC3_ZERO, act[3], VEC3_ZERO, self.step_counter)
             ) for act in action]
 
-        print(action)
-        self._send_commands(action)
+        # send high-level commands to each drone (e.g. FULLSTATE + args)
+        for (_, connection), (cmd, args) in zip(self.ctrl, action):
+            command = ("command", (cmd, args))
+            connection.send(command)
 
         # Repeat for as many as the aggregate physics steps
+        prev_clipped_action = np.zeros((self.NUM_DRONES, 4))
         for _ in range(self.PYB_STEPS_PER_CTRL):
             # Update and store the drones kinematic info for certain
-            # Between aggregate steps for certain types of update
-            if (
-                self.PYB_STEPS_PER_CTRL > 1
-                and
-                self.PHYSICS in PHYSICS_WITH_KIN_INFO
-            ):
+            if (self.PYB_STEPS_PER_CTRL > 1 and self.PHYSICS in KIN_PHYSICS):
                 self._updateAndStoreKinematicInformation()
 
             clipped_action = np.zeros((self.NUM_DRONES, 4))
+
             # update the state of mellinger controller
-            for i, drone in enumerate(self.ctrl):
-                clipped_action[i] = drone.computeControl(
-                    self.step_counter,
+            for i, (_, connection) in enumerate(self.ctrl):
+                command = (
+                    "step",
+                    (self.step_counter,
                     self.previous_pos[i],
                     self.previous_rpy[i],
                     self.previous_vel[i],
                     VEC3_ZERO,
-                    VEC3_ZERO
-                )[0]
+                    VEC3_ZERO)
+                )
+                connection.send(command)
 
-            # TODO debugging
-            print(clipped_action)
+                # get motor rpms from mellinger controllers
+                clipped_action[i] = connection.recv()
 
             # Step the simulation using the desired physics update
-            self._apply_physics(clipped_action)
+            self._apply_physics(clipped_action, prev_clipped_action)
 
             # Save the last applied action (e.g. to compute drag)
-            self.last_clipped_action = clipped_action
+            prev_clipped_action = clipped_action
 
         # Update and store the drones kinematic information
         self._updateAndStoreKinematicInformation()
@@ -300,20 +237,24 @@ class MultiRaceAviary(BaseAviary):
         self.previous_rpy = obs[:, 3:6]
         self.previous_vel = obs[:, 6:9]
 
-        # TODO debugging
-        # for c in self.ctrl:
-        #     print(c.control)
-        #     print(c.command_queue)
-        #     print(id(c.firm))
         return obs, reward, terminated, truncated, info
 
 ###############################################################################
 
+    def close(self):
+        """Terminates the environment."""
+        super().close()
+        for p, c in self.ctrl:
+            c.send("close") # close controller processes
+            c.close() # close connection from this side
+            p.join() # wait for processes to be stopped
+
+###############################################################################
+
     def _actionSpace(self):
-        # positional movement: x, y, z, yaw (absolute / relative)
-        act_lower = np.array([-1*np.ones(4) for _ in range(self.NUM_DRONES)])
-        act_upper = np.array([+1*np.ones(4) for _ in range(self.NUM_DRONES)])
-        return spaces.Box(low=act_lower, high=act_upper, dtype=np.float32)
+        """Returns the action space of the environment."""
+        act_limit = np.ones((self.NUM_DRONES, 4))
+        return spaces.Box(low=-1 * act_limit, high=act_limit, dtype=float)
 
 ###############################################################################
 
@@ -322,8 +263,7 @@ class MultiRaceAviary(BaseAviary):
 
         Returns
         -------
-        ndarray
-            A Box() of shape (NUM_DRONES,H,W,4) or (NUM_DRONES,12+37)
+        ndarray: A Box() of shape (NUM_DRONES,H,W,4) or (NUM_DRONES,12+37)
             depending on the observation type.
 
         """
@@ -334,9 +274,16 @@ class MultiRaceAviary(BaseAviary):
             )
 
         if self.observation_type == ObservationType.KIN:
+            pis = np.pi * np.ones(3)
             # Drone observations: X, Y, Z, R, P, Y, VX, VY, VZ, WX, WY, WZ
-            dro_lower = -10*np.ones((self.NUM_DRONES, 12))
-            dro_upper = 10*np.ones((self.NUM_DRONES, 12))
+            dro_upper = np.hstack([self.env_bounds[1], pis, 10*np.ones(6)])
+            dro_lower = -1 * dro_upper
+            dro_lower[2] = 0 # lower position bound is the ground at 0
+
+            dro_lower = np.vstack([dro_lower for _ in range(self.NUM_DRONES)])
+            dro_upper = np.vstack([dro_upper for _ in range(self.NUM_DRONES)])
+
+            # TODO: provide more precise gate/obstacle limits
 
             # Add obstacles to observation space
             obs_lower = np.concatenate([
@@ -455,7 +402,7 @@ class MultiRaceAviary(BaseAviary):
 
 ###############################################################################
 
-    def _apply_physics(self, action):
+    def _apply_physics(self, action, prev_action):
         """Apply pybullet physics to the drones for one step."""
         for i in range (self.NUM_DRONES):
             if self.PHYSICS == Physics.PYB:
@@ -467,116 +414,18 @@ class MultiRaceAviary(BaseAviary):
                 self._groundEffect(action[i, :], i)
             elif self.PHYSICS == Physics.PYB_DRAG:
                 self._physics(action[i, :], i)
-                self._drag(self.last_clipped_action[i, :], i)
+                self._drag(prev_action[i, :], i)
             elif self.PHYSICS == Physics.PYB_DW:
                 self._physics(action[i, :], i)
                 self._downwash(i)
             elif self.PHYSICS == Physics.PYB_GND_DRAG_DW:
                 self._physics(action[i, :], i)
                 self._groundEffect(action[i, :], i)
-                self._drag(self.last_clipped_action[i, :], i)
+                self._drag(prev_action[i, :], i)
                 self._downwash(i)
         #### PyBullet computes the new state, unless Physics.DYN ###
         if self.PHYSICS != Physics.DYN:
             pb.stepSimulation(physicsClientId=self.CLIENT)
-
-###############################################################################
-
-    def _send_commands(self, action):
-        for mellinger, (command, args) in zip(self.ctrl, action):
-            if command == Command.FULLSTATE:
-                mellinger.sendFullStateCmd(*args)
-            elif command == Command.TAKEOFF:
-                mellinger.sendTakeoffCmd(*args)
-            elif command == Command.TAKEOFFYAW:
-                mellinger.sendTakeoffYawCmd(*args)
-            elif command == Command.TAKEOFFVEL:
-                mellinger.sendTakeoffVelCmd(*args)
-            elif command == Command.LAND:
-                mellinger.sendLandCmd(*args)
-            elif command == Command.LANDYAW:
-                mellinger.sendLandYawCmd(*args)
-            elif command == Command.LANDVEL:
-                mellinger.sendLandVelCmd(*args)
-            elif command == Command.GOTO:
-                mellinger.sendGotoCmd(*args)
-            elif command == Command.STOP:
-                mellinger.sendStopCmd(*args)
-            elif command == Command.NOTIFY:
-                mellinger.notifySetpointStop(*args)
-
-            mellinger._process_command_queue(args[-1])
-
-###############################################################################
-#TODO
-    def _preprocessAction(self, action):
-        """Pre-processes the action passed to `.step()` into motors' RPMs.
-
-        Parameter `action` is processed differenly for each of the different
-        action types: the input to n-th drone, `action[n]` can be of length
-        1, 3, or 4, and represent RPMs, desired thrust and torques, or the next
-        target position to reach using PID control.
-
-        Parameter `action` is processed differenly for each of the different
-        action types: `action` can be of length 1, 3, or 4 and represent 
-        RPMs, desired thrust and torques, the next target position to reach 
-        using PID control, a desired velocity vector, etc.
-
-        Parameters
-        ----------
-        action : ndarray
-            The input action for each drone, to be translated into RPMs.
-
-        Returns
-        -------
-        ndarray
-            (NUM_DRONES, 4)-shaped array of ints containing to clipped RPMs
-            commanded to the 4 motors of each drone.
-
-        """
-        rpm = np.zeros((self.NUM_DRONES, 4))
-        for k in range(self.NUM_DRONES):
-            target = action[k, :]
-
-            if self.action_type == ActionType.RPM:
-                rpm[k,:] = np.array(self.HOVER_RPM * (1+0.05*target))
-
-            elif self.action_type == ActionType.PID:
-                state = self._getDroneStateVector(k)
-                next_pos = self._calculateNextStep(
-                    current_position=state[0:3],
-                    destination=target,
-                    step_size=1,
-                )
-                rpm_k, _, _ = self.ctrl[k].computeControl(
-                    control_timestep=self.CTRL_TIMESTEP,
-                    cur_pos=state[0:3],
-                    cur_rpy=state[7:10],
-                    cur_vel=state[10:13],
-                    cur_ang_vel=state[13:16],
-                    target_pos=next_pos
-                )
-                rpm[k,:] = rpm_k
-
-            elif self.action_type == ActionType.VEL:
-                state = self._getDroneStateVector(k)
-                if np.linalg.norm(target[0:3]) != 0:
-                    v_unit_vector = target[0:3] / np.linalg.norm(target[0:3])
-                else:
-                    v_unit_vector = np.zeros(3)
-                temp, _, _ = self.ctrl[k].computeControl(
-                    control_timestep=self.CTRL_TIMESTEP,
-                    cur_pos=state[0:3],
-                    cur_rpy=state[3:6],
-                    cur_vel=state[6:9],
-                    cur_ang_vel=state[9:12],
-                    target_pos=state[0:3], # same as the current position
-                    target_rpy=np.array([0,0,state[6]]), # keep current yaw
-                    target_vel=SPEED_LIMIT * np.abs(target[3]) * v_unit_vector # target the desired velocity vector
-                )
-                rpm[k,:] = temp
-
-        return rpm
 
 ###############################################################################
 
@@ -585,7 +434,6 @@ class MultiRaceAviary(BaseAviary):
         if self.drone_collisions:
             objects += [d for i, d in enumerate(self.DRONE_IDS) if i != drone_id]
 
-        print(objects)
         for obj_id in objects:
             # NOTE: only returning the first collision per step
             if pb.getContactPoints(
@@ -605,9 +453,8 @@ class MultiRaceAviary(BaseAviary):
 
         Returns
         -------
-        ndarray
-            A Box() of shape (NUM_DRONES,H,W,4) or (NUM_DRONES,12+37) depending
-            on the observation type.
+        ndarray: Observations of shape (NUM_DRONES,H,W,4) or (NUM_DRONES,12+37)
+            depending on the observation type.
         """
         if self.observation_type == ObservationType.RGB:
             if self.step_counter%self.IMG_CAPTURE_FREQ == 0:
@@ -676,7 +523,7 @@ class MultiRaceAviary(BaseAviary):
                         obstacles_range[j] = False
 
                 # combine drone, gate, obstacle and progress observation
-                obs_49[i, :12] = drone.reshape(12,)
+                obs_49[i, :12] = drone.reshape((12,))
                 obs_49[i, 12:28] = gate_poses.flatten()
                 obs_49[i, 28:32] = gate_range
                 obs_49[i, 32:44] = obstacles_poses.flatten()
@@ -690,19 +537,9 @@ class MultiRaceAviary(BaseAviary):
     def _computeReward(self):
         """Computes the current reward value.
 
-        Returns
-        -------
-        float
-            The reward.
+        NOTE: Unused (should be overwritten by wrapper anyway)
         """
-        reward = 0
-
-        # TODO: design this according to your needs
-        # states = np.array([self._getDroneStateVector(i) for i in range(self.NUM_DRONES)])
-        for _ in range(self.NUM_DRONES):
-            pass
-
-        return reward
+        return 0
 
 ###############################################################################
 
@@ -711,14 +548,13 @@ class MultiRaceAviary(BaseAviary):
 
         Returns
         -------
-        bool
-            Whether the current episode is done.
+        bool: Whether the current episode is done.
         """
         for i in range(self.NUM_DRONES):
             state = self._getDroneStateVector(i)
 
-            out_of_bounds = np.any(np.abs(state[:3]) > self.env_bounds)
-            print("Unstable: ", np.abs(state[13:16]))
+            out_of_bounds = np.any(np.abs(state[:3]) > self.env_bounds[1])
+            # print("Unstable: ", np.abs(state[13:16]))
             # unstable = np.any(np.abs(state[13:16]) > 20) # TODO replace arbitrary theshold
             unstable = False
             crashed = self._collision(i) is not None
@@ -737,8 +573,7 @@ class MultiRaceAviary(BaseAviary):
 
         Returns
         -------
-        bool
-            Whether the current episode timed out.
+        bool: Whether the current episode timed out.
         """
         return self.step_counter / self.PYB_FREQ > self.config.episode_len_sec
 
@@ -746,13 +581,7 @@ class MultiRaceAviary(BaseAviary):
 
     def _computeInfo(self):
         """Computes the current info dict(s).
-
-        Unused.
-
-        Returns
-        -------
-        dict[str, int]
-            Dummy value.
-
+        
+        NOTE: Unused
         """
         return {"answer": 42} #### Calculated by the Deep Thought supercomputer in 7.5M years

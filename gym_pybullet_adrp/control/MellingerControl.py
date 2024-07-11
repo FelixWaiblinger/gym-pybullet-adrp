@@ -7,11 +7,53 @@ from scipy.spatial.transform import Rotation as R
 
 from gym_pybullet_adrp.control import BaseControl
 from gym_pybullet_adrp.utils import get_quaternion_from_euler, load_firmware
-from gym_pybullet_adrp.utils.enums import DroneModel
+from gym_pybullet_adrp.utils.enums import DroneModel, Command
 from gym_pybullet_adrp.utils.constants import *
 
 if TYPE_CHECKING:
     import pycffirmware as firmware
+
+
+def low_level_control(drone: int, conn):
+    """Low-level control function to be run by an external process."""
+    controller = MellingerControl(drone, DroneModel.CF2X)
+
+    while True:
+        command, args = conn.recv()
+
+        if command == "reset":
+            obs, info = args
+            controller.reset(obs, info)
+        elif command == "step":
+            count, pos, rpy, vel, acc, ang = args
+            rpm = controller.computeControl(count, pos, rpy, vel, acc, ang)[0]
+            conn.send(rpm)
+        elif command == "command":
+            cmd, args = args
+            if cmd == Command.FULLSTATE:
+                controller.sendFullStateCmd(*args)
+            elif cmd == Command.TAKEOFF:
+                controller.sendTakeoffCmd(*args)
+            elif cmd == Command.TAKEOFFYAW:
+                controller.sendTakeoffYawCmd(*args)
+            elif cmd == Command.TAKEOFFVEL:
+                controller.sendTakeoffVelCmd(*args)
+            elif cmd == Command.LAND:
+                controller.sendLandCmd(*args)
+            elif cmd == Command.LANDYAW:
+                controller.sendLandYawCmd(*args)
+            elif cmd == Command.LANDVEL:
+                controller.sendLandVelCmd(*args)
+            elif cmd == Command.GOTO:
+                controller.sendGotoCmd(*args)
+            elif cmd == Command.STOP:
+                controller.sendStopCmd(*args)
+            elif cmd == Command.NOTIFY:
+                controller.notifySetpointStop(*args)
+            controller.process_command_queue(args[-1])
+        else:
+            conn.close()
+            return
 
 
 class MellingerControl(BaseControl):
@@ -262,7 +304,7 @@ class MellingerControl(BaseControl):
 
 ###############################################################################
 
-    def _process_command_queue(self, sim_time):
+    def process_command_queue(self, sim_time):
         if len(self.command_queue) > 0:
             # Reset planner object
             self.firm.crtpCommanderHighLevelStop()
