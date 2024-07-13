@@ -503,25 +503,25 @@ class MellingerControl(BaseControl):
 ###############################################################################
 
     def _sendFullStateCmd(self, pos, vel, acc, yaw, rpy_rate, timestep):
-        self.setpoint.position.x = float(pos[0])
-        self.setpoint.position.y = float(pos[1])
-        self.setpoint.position.z = float(pos[2])
-        self.setpoint.velocity.x = float(vel[0])
-        self.setpoint.velocity.y = float(vel[1])
-        self.setpoint.velocity.z = float(vel[2])
-        self.setpoint.acceleration.x = float(acc[0])
-        self.setpoint.acceleration.y = float(acc[1])
-        self.setpoint.acceleration.z = float(acc[2])
+        self.setpoint.position.x = pos[0]
+        self.setpoint.position.y = pos[1]
+        self.setpoint.position.z = pos[2]
+        self.setpoint.velocity.x = vel[0]
+        self.setpoint.velocity.y = vel[1]
+        self.setpoint.velocity.z = vel[2]
+        self.setpoint.acceleration.x = acc[0]
+        self.setpoint.acceleration.y = acc[1]
+        self.setpoint.acceleration.z = acc[2]
 
-        self.setpoint.attitudeRate.roll = float(rpy_rate[0]) * RAD_TO_DEG
-        self.setpoint.attitudeRate.pitch = float(rpy_rate[1]) * RAD_TO_DEG
-        self.setpoint.attitudeRate.yaw = float(rpy_rate[2]) * RAD_TO_DEG
+        self.setpoint.attitudeRate.roll = rpy_rate[0] * RAD_TO_DEG
+        self.setpoint.attitudeRate.pitch = rpy_rate[1] * RAD_TO_DEG
+        self.setpoint.attitudeRate.yaw = rpy_rate[2] * RAD_TO_DEG
 
         quat = get_quaternion_from_euler(0, 0, yaw)
-        self.setpoint.attitudeQuaternion.x = float(quat[0])
-        self.setpoint.attitudeQuaternion.y = float(quat[1])
-        self.setpoint.attitudeQuaternion.z = float(quat[2])
-        self.setpoint.attitudeQuaternion.w = float(quat[3])
+        self.setpoint.attitudeQuaternion.x = quat[0]        
+        self.setpoint.attitudeQuaternion.y = quat[1]
+        self.setpoint.attitudeQuaternion.z = quat[2]
+        self.setpoint.attitudeQuaternion.w = quat[3]
 
         # initilize setpoint modes to match cmdFullState
         self.setpoint.mode.x = self.firm.modeAbs

@@ -1,20 +1,17 @@
 """Drone Racing for multiple drones on one race track"""
 
-import os
 import multiprocessing as mp
 
 import numpy as np
 import pybullet as pb
 from munch import Munch
 from gymnasium import spaces
-from PIL import Image
-from scipy.spatial.transform import Rotation as R
 
 from gym_pybullet_adrp.envs.BaseAviary import BaseAviary
 from gym_pybullet_adrp.control import low_level_control
+from gym_pybullet_adrp.utils.constants import *
 from gym_pybullet_adrp.utils.enums import \
     DroneModel, Physics, ActionType, ObservationType, ImageType, Command
-from gym_pybullet_adrp.utils.constants import *
 
 
 KIN_PHYSICS = [

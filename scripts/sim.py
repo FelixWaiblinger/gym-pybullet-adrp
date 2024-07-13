@@ -90,9 +90,6 @@ def simulate(
 
         stats["episode_times"][run] = sim_time
 
-        # TODO debugging
-        print(f"{terminated = }, {truncated = }")
-
     env.close()
 
     return stats["episode_times"]
