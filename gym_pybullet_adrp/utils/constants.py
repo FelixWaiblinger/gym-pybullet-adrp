@@ -9,7 +9,7 @@ import numpy as np
 # math
 RAD_TO_DEG = 180 / math.pi
 DEG_TO_RAD = math.pi / 180
-VEC3_UP = np.array([0, 0, 1])
+VEC3_UP = np.array([0, 0, 1], dtype=np.float64)
 VEC3_ZERO = np.zeros(3)
 
 ###############################################################################
@@ -36,8 +36,8 @@ PWM2RPM_SCALE = 0.2685
 PWM2RPM_CONST = 4070.3
 ACTION_DELAY = 0
 SENSOR_DELAY = 0
-GYRO_LPF_CUTOFF_FREQ = 80
-ACCEL_LPF_CUTOFF_FREQ = 30
+GYRO_LPF_CUTOFF_FREQ = 30
+ACCEL_LPF_CUTOFF_FREQ = 80
 SUPPLY_VOLTAGE = 3
 MOTOR_SET_ENABLE = True
 QUAD_FORMATION_X = True

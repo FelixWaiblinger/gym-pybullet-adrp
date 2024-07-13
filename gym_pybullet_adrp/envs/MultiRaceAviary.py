@@ -139,7 +139,6 @@ class MultiRaceAviary(BaseAviary):
         initial_obs, initial_info = super().reset(seed, options)
         self._build_racetrack()
         self.current_gate = np.zeros(self.NUM_DRONES)
-        initial_obs = self._computeObs()
 
         # reset mellinger controllers
         for _, connection in self.ctrl:
@@ -245,7 +244,7 @@ class MultiRaceAviary(BaseAviary):
         """Terminates the environment."""
         super().close()
         for p, c in self.ctrl:
-            c.send("close") # close controller processes
+            c.send("close", None) # close controller processes
             c.close() # close connection from this side
             p.join() # wait for processes to be stopped
 
@@ -306,7 +305,7 @@ class MultiRaceAviary(BaseAviary):
             return spaces.Box(
                 low=np.hstack([dro_lower, obs_lower]),
                 high=np.hstack([dro_upper, obs_upper]),
-                dtype=np.float32
+                dtype=np.float64
             )
 
 ###############################################################################
@@ -402,7 +401,7 @@ class MultiRaceAviary(BaseAviary):
 
 ###############################################################################
 
-    def _apply_physics(self, action, prev_action):
+    def _apply_physics(self, action, prev_action, disturbance=None):
         """Apply pybullet physics to the drones for one step."""
         for i in range (self.NUM_DRONES):
             if self.PHYSICS == Physics.PYB:
@@ -423,6 +422,16 @@ class MultiRaceAviary(BaseAviary):
                 self._groundEffect(action[i, :], i)
                 self._drag(prev_action[i, :], i)
                 self._downwash(i)
+
+        if disturbance is not None:
+            pos = self._getDroneStateVector(i)[:3]
+            pb.applyExternalForce(
+                self.DRONE_IDS[i],
+                linkIndex=4,  # Link attached to the quadrotor's center of mass.
+                forceObj=disturbance,
+                posObj=pos,
+                flags=pb.WORLD_FRAME,
+                physicsClientId=self.CLIENT)
         #### PyBullet computes the new state, unless Physics.DYN ###
         if self.PHYSICS != Physics.DYN:
             pb.stepSimulation(physicsClientId=self.CLIENT)
@@ -441,7 +450,7 @@ class MultiRaceAviary(BaseAviary):
                 bodyB=self.DRONE_IDS[drone_id],
                 physicsClientId=self.CLIENT,
             ):
-                print(f"collided with {obj_id}")
+                # print(f"collided with {obj_id}")
                 return obj_id
 
         return None
@@ -530,7 +539,7 @@ class MultiRaceAviary(BaseAviary):
                 obs_49[i, 44:48] = obstacles_range
                 obs_49[i, -1] = self.current_gate[i]
 
-            return obs_49.astype(np.float32)
+            return obs_49.astype(np.float64)
 
 ###############################################################################
 
@@ -560,7 +569,7 @@ class MultiRaceAviary(BaseAviary):
             crashed = self._collision(i) is not None
 
             # TODO debugging
-            print(f"{out_of_bounds = }, {unstable = }, {crashed = }")
+            # print(f"{out_of_bounds = }, {unstable = }, {crashed = }")
 
             self.drones_eliminated[i] = out_of_bounds or unstable or crashed
 

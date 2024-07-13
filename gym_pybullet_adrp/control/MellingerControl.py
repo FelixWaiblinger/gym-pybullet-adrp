@@ -98,9 +98,6 @@ class MellingerControl(BaseControl):
         super().reset()
 
         # NOTE: whole section taken from safe-control-gym.firmware_wrapper
-        self.states = []
-        self.takeoff_sent = False
-
         # Initialize history
         self.action_history = [[0, 0, 0, 0] for _ in range(ACTION_DELAY)]
         self.sensor_history = [[[0, 0, 0], [0, 0, 0]] for _ in range(SENSOR_DELAY)]
@@ -116,7 +113,7 @@ class MellingerControl(BaseControl):
         # Initialize state objects
         self.control = self.firm.control_t()
         self.setpoint = self.firm.setpoint_t()
-        self.sensorData = self.firm.sensorData_t()
+        self.sensor_data = self.firm.sensorData_t()
         self.state = self.firm.state_t()
         self.tick = 0
         self.pwms = [0, 0, 0, 0]
@@ -126,13 +123,12 @@ class MellingerControl(BaseControl):
         self.tumble_counter = 0
         self.prev_vel = np.array([0, 0, 0])
         self.prev_rpy = np.array([0, 0, 0])
-        self.prev_time_s = None
         self.last_pos_pid_call = 0
         self.last_att_pid_call = 0
 
         # Initialize state flags
         self._error = False
-        self.sensorData_set = False
+        self.sensor_data_set = False
         self.state_set = False
         self.full_state_cmd_override = True  # When true, high level commander is not called
 
@@ -143,25 +139,11 @@ class MellingerControl(BaseControl):
         drone = init_obs[self.drone_id, :12]
 
         self.firm.crtpCommanderHighLevelInit()
-        self._update_state(
-            0, drone[:3], drone[6:9], VEC3_UP, drone[3:6] * RAD_TO_DEG
-        )
+        self._update_state(0, drone[:3], drone[6:9], VEC3_UP, drone[3:6])
 
         self.prev_rpy = drone[3:6]
         self.prev_vel = drone[6:9]
         self.firm.crtpCommanderHighLevelTellState(self.state)
-
-        # Initialize visualization tools
-        self.first_motor_killed_print = True
-        self.last_visualized_setpoint = None
-
-        self.results_dict = {
-            "obs": [],
-            "reward": [],
-            "done": [],
-            "info": [],
-            "action": [],
-        }
 
 ###############################################################################
 
@@ -216,11 +198,6 @@ class MellingerControl(BaseControl):
         # body_rot = R.from_quat(cur_rpy_quat)
         body_rot = R.from_euler("XYZ", cur_rpy).inv()
 
-        if self.takeoff_sent:
-            self.states += [
-                [self.tick / FIRMWARE_FREQ, cur_pos[0], cur_pos[1], cur_pos[2]]
-            ]
-
         # body coord, rad/s
         cur_rotation_rates = (cur_rpy - self.prev_rpy) / FIRMWARE_DT
         self.prev_rpy = cur_rpy
@@ -236,7 +213,7 @@ class MellingerControl(BaseControl):
             cur_pos,
             cur_vel,
             cur_acc,
-            cur_rpy * RAD_TO_DEG,
+            cur_rpy,
         )
 
         # Update sensor data
@@ -254,16 +231,22 @@ class MellingerControl(BaseControl):
             )
 
         # Update setpoint
-        self._updateSetpoint(self.tick / FIRMWARE_FREQ)  # setpoint looks right
+        self._update_setpoint(self.tick / FIRMWARE_FREQ)  # setpoint looks right
 
         # Step controller
-        self._step_controller()
-        self.control_counter += 1
+        pwms = self._step_controller()
 
-        clipped_pwms = np.clip(np.array(self.pwms), MIN_PWM, MAX_PWM)
-        # rpms = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
-        rpms = PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST
-        rpms = rpms[[3, 2, 1, 0]]
+        clipped_pwms = np.clip(np.array(pwms), MIN_PWM, MAX_PWM)
+        # clipped_pwms = np.array([65319.02972592, 65535., 65535., 65535.])
+        thrust = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
+        thrust = thrust[[3, 2, 1, 0]]
+
+        # convert to quad motor rpm commands
+        pwms = self._thr2pwm(
+            thrust, PWM2RPM_SCALE, PWM2RPM_CONST, self.KF, MIN_PWM, MAX_PWM
+        )
+        rpms = self._pwm2rpm(pwms, PWM2RPM_SCALE, PWM2RPM_CONST)
+        # print(thrust)
 
         return rpms, None, None
 
@@ -272,31 +255,24 @@ class MellingerControl(BaseControl):
 # region CONTROLLER
 
     def _init_variables(self):
-        # self.KF = self._getURDFParameter('kf')
-        # self.KF = 5.5e-5 # NOTE: taken from 
         self.KF = 3.16e-10 # NOTE: taken from safe-control-gym.firmware_wrapper
         self.KM = self._getURDFParameter('km')
-        self.control_counter = 0
-        self.takeoff_sent = False
         self.prev_rpy = np.zeros(3)
         self.prev_vel = np.zeros(3)
         self.tick = 0
         self.control = self.firm.control_t()
         self.setpoint = self.firm.setpoint_t()
-        self.sensorData = self.firm.sensorData_t()
+        self.sensor_data = self.firm.sensorData_t()
         self.state = self.firm.state_t()
-        self.tick = 0
         self.pwms = [0, 0, 0, 0]
         self.action = [0, 0, 0, 0]
         self.command_queue = []
         self.tumble_counter = 0
-        self.prev_vel = np.array([0, 0, 0])
-        self.prev_rpy = np.array([0, 0, 0])
         self.prev_time_s = None
         self.last_pos_pid_call = 0
         self.last_att_pid_call = 0
         self._error = False
-        self.sensorData_set = False
+        self.sensor_data_set = False
         self.state_set = False
         self.full_state_cmd_override = True
         self.acclpf = []
@@ -316,7 +292,58 @@ class MellingerControl(BaseControl):
 
 ###############################################################################
 
-    def _update_sensorData(self, timestamp, acc_vals, gyro_vals, baro_vals=[1013.25, 25]):
+    def _thr2pwm(self, thrust, pwm2rpm_scale, pwm2rpm_const, ct, pwm_min, pwm_max):
+        """Generic cmd to pwm function.
+
+        For 1D, thrust is the total of all 4 motors; for 2D, 1st thrust is total of motor
+        1 & 4, 2nd thrust is total of motor 2 & 3; for 4D, thrust is thrust of each motor.
+
+        Args:
+            thrust (ndarray): array of length 1, 2 containing target thrusts.
+            pwm2rpm_scale (float): scaling factor between PWM and RPMs.
+            pwm2rpm_const (float): constant factor between PWM and RPMs.
+            ct (float): torque coefficient.
+            pwm_min (float): pwm lower bound.
+            pwm_max (float): pwm upper bound.
+
+        Returns:
+            ndarray: array of length 4 containing PWM.
+
+        """
+        n_motor = 4 // int(thrust.size)
+        thrust = np.clip(thrust, np.zeros_like(thrust), None)  # Make sure thrust is not negative.
+        motor_pwm = (np.sqrt(thrust / n_motor / ct) - pwm2rpm_const) / pwm2rpm_scale
+        if thrust.size == 1:  # 1D case.
+            motor_pwm = np.repeat(motor_pwm, 4)
+        elif thrust.size == 2:  # 2D case.
+            motor_pwm = np.concatenate([motor_pwm, motor_pwm[::-1]], 0)
+        elif thrust.size == 4:  # 3D case.
+            motor_pwm = np.array(motor_pwm)
+        else:
+            raise ValueError("Input action shape not supported.")
+        motor_pwm = np.clip(motor_pwm, pwm_min, pwm_max)
+        return motor_pwm
+
+###############################################################################
+
+    def _pwm2rpm(self, pwm, pwm2rpm_scale, pwm2rpm_const):
+        """Computes motor squared rpm from pwm.
+
+        Args:
+            pwm (ndarray): Array of length 4 containing PWM.
+            pwm2rpm_scale (float): Scaling factor between PWM and RPMs.
+            pwm2rpm_const (float): Constant factor between PWM and RPMs.
+
+        Returns:
+            ndarray: Array of length 4 containing RPMs.
+
+        """
+        rpm = pwm2rpm_scale * pwm + pwm2rpm_const
+        return rpm
+
+###############################################################################
+
+    def _update_sensorData(self, timestamp, accs, gyros):
         """
         Axis3f acc;               // Gs
         Axis3f gyro;              // deg/s
@@ -328,29 +355,17 @@ class MellingerControl(BaseControl):
         #endif
         uint64_t interruptTimestamp;   // microseconds
         """
-        self._update_acc(*acc_vals)
-        self._update_gyro(*gyro_vals)
+        acc = [self.firm.lpf2pApply(self.acclpf[i], v) for i, v in enumerate(accs)]
+        gyro = [self.firm.lpf2pApply(self.gyrolpf[i], v) for i, v in enumerate(gyros)]
+        self._update_vector(self.sensor_data.acc, ("x", "y", "z"), acc)
+        self._update_vector(self.sensor_data.gyro, ("x", "y", "z"), gyro)
 
-        self.sensorData.interruptTimestamp = timestamp
-        self.sensorData_set = True
-
-###############################################################################
-
-    def _update_gyro(self, x, y, z):
-        self.sensorData.gyro.x = self.firm.lpf2pApply(self.gyrolpf[0], float(x))
-        self.sensorData.gyro.y = self.firm.lpf2pApply(self.gyrolpf[1], float(y))
-        self.sensorData.gyro.z = self.firm.lpf2pApply(self.gyrolpf[2], float(z))
+        self.sensor_data.interruptTimestamp = timestamp
+        self.sensor_data_set = True
 
 ###############################################################################
 
-    def _update_acc(self, x, y, z):
-        self.sensorData.acc.x = self.firm.lpf2pApply(self.acclpf[0], x)
-        self.sensorData.acc.y = self.firm.lpf2pApply(self.acclpf[1], y)
-        self.sensorData.acc.z = self.firm.lpf2pApply(self.acclpf[2], z)
-
-###############################################################################
-
-    def _updateSetpoint(self, timestep):
+    def _update_setpoint(self, timestep):
         if not self.full_state_cmd_override:
             self.firm.crtpCommanderHighLevelTellState(self.state)
             # Sets commander time variable --- this is time in s from start of flight
@@ -360,11 +375,7 @@ class MellingerControl(BaseControl):
 ###############################################################################
 
     def _step_controller(self):
-        # if not (self.sensorData_set):
-        #     logger.warning("sensorData has not been updated since last controller call.")
-        # if not (self.state_set):
-        #     logger.warning("state has not been updated since last controller call.")
-        self.sensorData_set = False
+        self.sensor_data_set = False
         self.state_set = False
 
         # Check for tumbling crazyflie
@@ -374,10 +385,9 @@ class MellingerControl(BaseControl):
             self.tumble_counter = 0
         if self.tumble_counter >= 30:
             # logger.warning("CrazyFlie is Tumbling. Killing motors to save propellers.")
-            self.pwms = [0, 0, 0, 0]
             self.tick += 1
             self._error = True
-            return
+            return np.zeros(4)
 
         # Determine tick based on time passed, allowing us to run pid slower than the 1000Hz it was
         # designed for
@@ -395,73 +405,39 @@ class MellingerControl(BaseControl):
             _tick = 1  # Runs neither controller
 
         self.firm.controllerMellinger(
-            self.control, self.setpoint, self.sensorData, self.state, _tick
+            self.control, self.setpoint, self.sensor_data, self.state, _tick
         )
 
         # Get pwm values from control object
-        self._powerDistribution(self.control)
         self.tick += 1
+        return self._compute_pwms(self.control)
 
 ###############################################################################
 
-    def _powerDistribution(self, control_t):
-        motor_pwms = []
-        if QUAD_FORMATION_X:
-            r = control_t.roll / 2
-            p = control_t.pitch / 2
+    def _compute_pwms(self, control_t):
+        """Return clipped PWM values for each rotor"""
 
-            motor_pwms += [
-                self._motorsGetPWM(self._limitThrust(control_t.thrust - r + p + control_t.yaw))
-            ]
-            motor_pwms += [
-                self._motorsGetPWM(self._limitThrust(control_t.thrust - r - p - control_t.yaw))
-            ]
-            motor_pwms += [
-                self._motorsGetPWM(self._limitThrust(control_t.thrust + r - p + control_t.yaw))
-            ]
-            motor_pwms += [
-                self._motorsGetPWM(self._limitThrust(control_t.thrust + r + p - control_t.yaw))
-            ]
-        else:
-            motor_pwms += [
-                self._motorsGetPWM(self._limitThrust(control_t.thrust + control_t.pitch + control_t.yaw))
-            ]
-            motor_pwms += [
-                self._motorsGetPWM(self._limitThrust(control_t.thrust - control_t.roll - control_t.yaw))
-            ]
-            motor_pwms += [
-                self._motorsGetPWM(self._limitThrust(control_t.thrust - control_t.pitch + control_t.yaw))
-            ]
-            motor_pwms += [
-                self._motorsGetPWM(self._limitThrust(control_t.thrust + control_t.roll - control_t.yaw))
-            ]
+        assert QUAD_FORMATION_X, \
+            "MultiRaceAviary currently only supports drones in X formation!"
 
-        if MOTOR_SET_ENABLE:
-            self.pwms = motor_pwms
-        else:
-            self.pwms = np.clip(motor_pwms, MIN_PWM, MAX_PWM).tolist()
+        r = control_t.roll / 2
+        p = control_t.pitch / 2
+        y = control_t.yaw
+        t = control_t.thrust
 
-###############################################################################
+        thrust = np.array([t-r+p+y, t-r-p-y, t+r-p+y, t+r+p-y])
+        thrust = np.clip(thrust, 0, MAX_PWM)
+        thrust = thrust / MAX_PWM * 60
 
-    def _motorsGetPWM(self, thrust):
-        thrust = thrust / 65536 * 60
         volts = -0.0006239 * thrust**2 + 0.088 * thrust
-        percentage = min(1, volts / SUPPLY_VOLTAGE)
-        ratio = percentage * MAX_PWM
-        return ratio
+        percentage = np.minimum(1, volts / SUPPLY_VOLTAGE)
+        motor_pwms = percentage * MAX_PWM
+        return motor_pwms # NOTE: return unclipped because of MOTOR_SET_ENABLE
+        # return np.clip(motor_pwms, MIN_PWM, MAX_PWM)
 
 ###############################################################################
 
-    def _limitThrust(self, val):
-        if val > MAX_PWM:
-            return MAX_PWM
-        elif val < 0:
-            return 0
-        return val
-
-###############################################################################
-
-    def _update_state(self, timestamp, pos, vel, acc, rpy, quat=None):
+    def _update_state(self, timestamp, pos, vel, acc, rpy):
         """
         attitude_t attitude;      // deg (legacy CF2 body coordinate system, where pitch is inverted)
         quaternion_t attitudeQuaternion;
@@ -470,54 +446,37 @@ class MellingerControl(BaseControl):
         acc_t acc;                // Gs (but acc.z without considering gravity)
         """
         # RPY required for PID and high level commander
-        self._update_attitude_t(self.state.attitude, timestamp, *rpy)
-        # Quat required for Mellinger
-        self._update_attitudeQuaternion(
-            self.state.attitudeQuaternion, timestamp, *rpy
+        rpy[1] *= -1 # Legacy representation in CF firmware
+        self._update_vector(
+            self.state.attitude,
+            ("roll", "pitch", "yaw", "timestamp"),
+            [*rpy, timestamp]
         )
 
-        self._update_3D_vec(self.state.position, timestamp, *pos)
-        self._update_3D_vec(self.state.velocity, timestamp, *vel)
-        self._update_3D_vec(self.state.acc, timestamp, *acc)
+        # Quat required for Mellinger
+        rpy_quat = get_quaternion_from_euler(*rpy)
+        self._update_vector(
+            self.state.attitudeQuaternion,
+            ("x", "y", "z", "w", "timestamp"),
+            [*rpy_quat, timestamp]
+        )
+
+        self._update_vector(self.state.position, values=[*pos, timestamp])
+        self._update_vector(self.state.velocity, values=[*vel, timestamp])
+        self._update_vector(self.state.acc, values=[*acc, timestamp])
         self.state_set = True
 
 ###############################################################################
 
-    def _update_3D_vec(self, point, timestamp, x, y, z):
-        point.x = float(x)
-        point.y = float(y)
-        point.z = float(z)
-        point.timestamp = timestamp
-
-###############################################################################
-
-    def _update_attitudeQuaternion(self, quaternion_t, timestamp, qx, qy, qz, qw=None):
-        """Updates attitude quaternion.
-
-        Note:
-            if qw is present, input is taken as a quat. Else, as roll, pitch, and yaw in deg
-        """
-        quaternion_t.timestamp = timestamp
-
-        if qw is None:  # passed roll, pitch, yaw
-            qx, qy, qz, qw = get_quaternion_from_euler(
-                qx / RAD_TO_DEG,
-                qy / RAD_TO_DEG,
-                qz / RAD_TO_DEG
-            )
-
-        quaternion_t.x = qx
-        quaternion_t.y = qy
-        quaternion_t.z = qz
-        quaternion_t.w = qw
-
-###############################################################################
-
-    def _update_attitude_t(self, attitude_t, timestamp, roll, pitch, yaw):
-        attitude_t.timestamp = timestamp
-        attitude_t.roll = float(roll)
-        attitude_t.pitch = float(-pitch)  # Legacy representation in CF firmware
-        attitude_t.yaw = float(yaw)
+    def _update_vector(
+        self,
+        vector,
+        attrs=("x", "y", "z", "timestamp"),
+        values=[0, 0, 0, 0]
+    ):
+        """Set attributes of a vector individually"""
+        for attr, val in zip(attrs, values):
+            setattr(vector, attr, val)
 
 # endregion
 
@@ -593,7 +552,6 @@ class MellingerControl(BaseControl):
 
     def _sendTakeoffCmd(self, height, duration):
         # logger.info(f"{self.tick}: Takeoff command sent.")
-        self.takeoff_sent = True
         self.firm.crtpCommanderHighLevelTakeoff(height, duration)
         self.full_state_cmd_override = False
 
