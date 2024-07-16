@@ -44,7 +44,9 @@ def simulate(
     # initialize drone agents
     agents: List[BaseController] = []
     if isinstance(controller, str):
-        controller = [controller] * n_drones
+        controller = [controller]
+    if isinstance(controller, list) and len(controller) != n_drones:
+        controller = controller * n_drones
     for drone_id, c in enumerate(controller):
         agents.append(load_controller(c)(drone_id))
 

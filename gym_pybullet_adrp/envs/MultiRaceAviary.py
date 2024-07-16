@@ -86,8 +86,8 @@ class MultiRaceAviary(BaseAviary):
             drone_model=drone_model,
             num_drones=num_drones,
             neighbourhood_radius=neighbourhood_radius,
-            initial_xyzs=np.array(race_config.init_states.pos),
-            initial_rpys=np.array(race_config.init_states.rpy) * DEG_TO_RAD,
+            initial_xyzs=np.array(race_config.init_states.pos)[:num_drones],
+            initial_rpys=np.array(race_config.init_states.rpy)[:num_drones] * DEG_TO_RAD,
             physics=physics,
             pyb_freq=pyb_freq,
             ctrl_freq=ctrl_freq,
@@ -111,9 +111,8 @@ class MultiRaceAviary(BaseAviary):
         self.action_scale = np.array([1, 1, 1, np.pi])
 
         self.step_counter = 0
-        self.previous_pos = np.zeros((num_drones, 3))
-        self.previous_rpy = np.zeros((num_drones, 3))
-        self.previous_vel = np.zeros((num_drones, 3))
+        self.rpms = np.zeros((self.NUM_DRONES, 4))
+        self.prev_rpms = np.zeros((self.NUM_DRONES, 4))
         self.drones_eliminated = np.zeros(num_drones, dtype=bool)
 
 ###############################################################################
@@ -144,9 +143,8 @@ class MultiRaceAviary(BaseAviary):
 
         self.drones_eliminated = np.array([False] * self.NUM_DRONES)
         self.step_counter = 0
-        self.previous_pos = initial_obs[:, :3]
-        self.previous_rpy = initial_obs[:, 3:6]
-        self.previous_vel = initial_obs[:, 6:9]
+        self.rpms = np.zeros((self.NUM_DRONES, 4))
+        self.prev_rpms = np.zeros((self.NUM_DRONES, 4))
 
         return initial_obs, initial_info
 
@@ -181,37 +179,39 @@ class MultiRaceAviary(BaseAviary):
         for (_, connection), (cmd, args) in zip(self.ctrl, action):
             command = ("command", (cmd, args))
             connection.send(command)
+            if connection.recv() != "ok":
+                raise RuntimeError("BIG TIME ERROR")
 
         # Repeat for as many as the aggregate physics steps
-        prev_clipped_action = np.zeros((self.NUM_DRONES, 4))
         for _ in range(self.PYB_STEPS_PER_CTRL):
             # Update and store the drones kinematic info for certain
             if (self.PYB_STEPS_PER_CTRL > 1 and self.PHYSICS in KIN_PHYSICS):
                 self._updateAndStoreKinematicInformation()
 
-            clipped_action = np.zeros((self.NUM_DRONES, 4))
+            # Step the simulation using the desired physics update
+            self._apply_physics(self.rpms, self.prev_rpms)
+            obs = self._computeObs()
 
             # update the state of mellinger controller
             for i, (_, connection) in enumerate(self.ctrl):
                 command = (
                     "step",
-                    (self.step_counter,
-                    self.previous_pos[i],
-                    self.previous_rpy[i],
-                    self.previous_vel[i],
-                    VEC3_ZERO,
-                    VEC3_ZERO)
+                    (
+                        self.step_counter,
+                        obs[i, :3], # pos
+                        obs[i, 3:6], # rpy
+                        obs[i, 6:9], # vel
+                        VEC3_ZERO,
+                        VEC3_ZERO
+                    )
                 )
                 connection.send(command)
 
+                # Save the last applied action (e.g. to compute drag)
+                self.prev_rpms[i] = self.rpms[i]
+
                 # get motor rpms from mellinger controllers
-                clipped_action[i] = connection.recv()
-
-            # Step the simulation using the desired physics update
-            self._apply_physics(clipped_action, prev_clipped_action)
-
-            # Save the last applied action (e.g. to compute drag)
-            prev_clipped_action = clipped_action
+                self.rpms[i] = connection.recv()
 
         # Update and store the drones kinematic information
         self._updateAndStoreKinematicInformation()
@@ -229,9 +229,6 @@ class MultiRaceAviary(BaseAviary):
 
         # Advance the step counter
         self.step_counter += self.PYB_STEPS_PER_CTRL
-        self.previous_pos = obs[:, :3]
-        self.previous_rpy = obs[:, 3:6]
-        self.previous_vel = obs[:, 6:9]
 
         return obs, reward, terminated, truncated, info
 
@@ -241,7 +238,7 @@ class MultiRaceAviary(BaseAviary):
         """Terminates the environment."""
         super().close()
         for p, c in self.ctrl:
-            c.send("close", None) # close controller processes
+            c.send(("close", None)) # close controller processes
             c.close() # close connection from this side
             p.join() # wait for processes to be stopped
 

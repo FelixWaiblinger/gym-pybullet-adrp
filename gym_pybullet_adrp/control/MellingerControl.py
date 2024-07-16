@@ -25,8 +25,8 @@ def low_level_control(drone: int, conn):
             obs, info = args
             controller.reset(obs, info)
         elif command == "step":
-            count, pos, rpy, vel, acc, ang = args
-            rpm = controller.computeControl(count, pos, rpy, vel, acc, ang)[0]
+            t, pos, rpy, vel, acc, ang = args
+            rpm = controller.computeControl(t, pos, rpy, vel, acc, ang)[0]
             conn.send(rpm)
         elif command == "command":
             cmd, args = args
@@ -51,6 +51,7 @@ def low_level_control(drone: int, conn):
             elif cmd == Command.NOTIFY:
                 controller.notifySetpointStop(*args)
             controller.process_command_queue(args[-1])
+            conn.send("ok")
         else:
             conn.close()
             return
@@ -116,13 +117,9 @@ class MellingerControl(BaseControl):
         self.sensor_data = self.firm.sensorData_t()
         self.state = self.firm.state_t()
         self.tick = 0
-        self.pwms = [0, 0, 0, 0]
-        self.action = [0, 0, 0, 0]
         self.command_queue = []
 
         self.tumble_counter = 0
-        self.prev_vel = np.array([0, 0, 0])
-        self.prev_rpy = np.array([0, 0, 0])
         self.last_pos_pid_call = 0
         self.last_att_pid_call = 0
 
@@ -195,7 +192,6 @@ class MellingerControl(BaseControl):
 
         """
         # Get state values from pybullet
-        # body_rot = R.from_quat(cur_rpy_quat)
         body_rot = R.from_euler("XYZ", cur_rpy).inv()
 
         # body coord, rad/s
@@ -231,7 +227,7 @@ class MellingerControl(BaseControl):
             )
 
         # Update setpoint
-        self._update_setpoint(self.tick / FIRMWARE_FREQ)  # setpoint looks right
+        self._update_setpoint(self.tick / FIRMWARE_FREQ)
 
         # Step controller
         pwms = self._step_controller()
@@ -246,7 +242,6 @@ class MellingerControl(BaseControl):
             thrust, PWM2RPM_SCALE, PWM2RPM_CONST, self.KF, MIN_PWM, MAX_PWM
         )
         rpms = self._pwm2rpm(pwms, PWM2RPM_SCALE, PWM2RPM_CONST)
-        # print(thrust)
 
         return rpms, None, None
 
@@ -264,11 +259,8 @@ class MellingerControl(BaseControl):
         self.setpoint = self.firm.setpoint_t()
         self.sensor_data = self.firm.sensorData_t()
         self.state = self.firm.state_t()
-        self.pwms = [0, 0, 0, 0]
-        self.action = [0, 0, 0, 0]
         self.command_queue = []
         self.tumble_counter = 0
-        self.prev_time_s = None
         self.last_pos_pid_call = 0
         self.last_att_pid_call = 0
         self._error = False
@@ -446,15 +438,15 @@ class MellingerControl(BaseControl):
         acc_t acc;                // Gs (but acc.z without considering gravity)
         """
         # RPY required for PID and high level commander
-        rpy[1] *= -1 # Legacy representation in CF firmware
+        temp_rpy = rpy * np.array([1, -1, 1]) # Legacy representation in CF firmware
         self._update_vector(
             self.state.attitude,
             ("roll", "pitch", "yaw", "timestamp"),
-            [*rpy, timestamp]
+            [*temp_rpy, timestamp]
         )
 
         # Quat required for Mellinger
-        rpy_quat = get_quaternion_from_euler(*rpy)
+        rpy_quat = get_quaternion_from_euler(*temp_rpy)
         self._update_vector(
             self.state.attitudeQuaternion,
             ("x", "y", "z", "w", "timestamp"),

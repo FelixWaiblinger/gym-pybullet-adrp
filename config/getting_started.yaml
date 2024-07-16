@@ -30,7 +30,7 @@ done_on_collision: True # terminate if collided with another object
 init_states: # one line per drone TODO: is there a nicer way?
   pos: [ # position
     [2.0, 1.0, 0.05],
-    # [1.0, 2.0, 0.05]
+    [1.0, 2.0, 0.05]
   ]
   vel: [ # linear velocity
     [0, 0, 0],
@@ -38,7 +38,7 @@ init_states: # one line per drone TODO: is there a nicer way?
   ]
   rpy: [ # rotation
     [0, 0, 0],
-    # [0, 0, 0]
+    [0, 0, 0]
   ]
   pqr: [ # angular velocity
     [0, 0, 0],
