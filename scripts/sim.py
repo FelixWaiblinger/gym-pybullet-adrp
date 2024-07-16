@@ -16,11 +16,14 @@ from user_controller import BaseController
 def simulate(
     config: str="config/getting_started.yaml",
     controller: str | List[str]=[
-        "user_controller/HoverController.py",
+        "user_controller/HardCodedController.py",
+        "user_controller/HardCodedController2.py",
+        # "user_controller/HoverController.py",
+        # "user_controller/HoverController.py",
         # "user_controller/HoverController2.py"
     ],
     n_runs: int=10,
-    n_drones: int=1,
+    n_drones: int=2,
     gui: bool=True,
 ) -> list[float]:
     """Evaluate the drone controller over multiple episodes.
@@ -47,8 +50,6 @@ def simulate(
         controller = [controller]
     if isinstance(controller, list) and len(controller) != n_drones:
         controller = controller * n_drones
-    for drone_id, c in enumerate(controller):
-        agents.append(load_controller(c)(drone_id))
 
     # track episode statistics
     stats = {
@@ -60,7 +61,10 @@ def simulate(
         episode_start = time.time()
         sim_time, episode_step = 0, 0
         terminated, truncated = False, False
-        obs, _ = env.reset()
+        obs, info = env.reset()
+        agents = []
+        for drone_id, c in enumerate(controller):
+            agents.append(load_controller(c)(drone_id, obs[drone_id], info))
 
         while not (terminated or truncated):
             sim_time = episode_step / config.ctrl_freq
@@ -77,8 +81,10 @@ def simulate(
             )
 
             # select an action for each agent
-            actions = np.vstack([a.predict(obs[i]) for i, a in enumerate(agents)])
-            # print(actions)
+            actions = [a.predict(sim_time, obs[i]) for i, a in enumerate(agents)]
+
+            if all(isinstance(a, np.ndarray) for a in actions):
+                actions = np.array(actions)
 
             # perform one step in the environment
             obs, reward, terminated, truncated, _ = env.step(actions)

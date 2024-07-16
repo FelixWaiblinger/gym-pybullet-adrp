@@ -491,8 +491,8 @@ class BaseAviary(gym.Env):
                                               physicsClientId=self.CLIENT
                                               ) for i in range(self.NUM_DRONES)])
         #### Remove default damping #################################
-        for i in range(self.NUM_DRONES):
-            p.changeDynamics(self.DRONE_IDS[i], -1, linearDamping=0, angularDamping=0)
+        # for i in range(self.NUM_DRONES):
+        #     p.changeDynamics(self.DRONE_IDS[i], -1, linearDamping=0, angularDamping=0)
         #### Show the frame of reference of the drone, note that ###
         #### It severly slows down the GUI #########################
         if self.GUI and self.USER_DEBUG:
@@ -514,7 +514,7 @@ class BaseAviary(gym.Env):
         and improve performance (at the expense of memory).
 
         """
-        for i in range (self.NUM_DRONES):
+        for i in range(self.NUM_DRONES):
             self.pos[i], self.quat[i] = p.getBasePositionAndOrientation(self.DRONE_IDS[i], physicsClientId=self.CLIENT)
             self.rpy[i] = p.getEulerFromQuaternion(self.quat[i])
             self.vel[i], self.ang_v[i] = p.getBaseVelocity(self.DRONE_IDS[i], physicsClientId=self.CLIENT)
@@ -695,8 +695,8 @@ class BaseAviary(gym.Env):
         torques = np.array(rpm**2)*self.KM
         # if self.DRONE_MODEL == DroneModel.RACE:
         #     torques = -torques
-        # z_torque = (-torques[0] + torques[1] - torques[2] + torques[3])
-        z_torque = (torques[0] - torques[1] + torques[2] - torques[3])
+        z_torque = (-torques[0] + torques[1] - torques[2] + torques[3])
+        # z_torque = (torques[0] - torques[1] + torques[2] - torques[3])
         for i in range(4):
             p.applyExternalForce(self.DRONE_IDS[nth_drone],
                                  i,

@@ -67,6 +67,7 @@ class Command(Enum):
     STOP = "stp"
     GOTO = "gto"
     NOTIFY = "ntf"
+    NONE = "non"
 
 
 class State(Enum):

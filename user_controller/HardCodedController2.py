@@ -11,7 +11,7 @@ from gym_pybullet_adrp.utils.enums import Command
 from gym_pybullet_adrp.utils.constants import Z_LOW, Z_HIGH, CTRL_FREQ, CTRL_DT
 
 
-class HardCodedController(BaseController):
+class HardCodedController2(BaseController):
     """Template controller class."""
 
 ###############################################################################
@@ -164,7 +164,7 @@ class HardCodedController(BaseController):
         #     args = [0.3, 2]  # Height, duration
         #     self._take_off = True  # Only send takeoff command once
         # else:
-        step = iteration# - 2 * self.CTRL_FREQ  # Account for 2s delay due to takeoff
+        step = iteration - 1 * self.CTRL_FREQ  # Account for 2s delay due to takeoff
         #     if ep_time - 2 > 0 and step < len(self.ref_x):
         target_pos = np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]])
         #print(f"Step: {step}, Target: {target_pos}")

@@ -10,7 +10,7 @@ import numpy as np
 RAD_TO_DEG = 180 / math.pi
 DEG_TO_RAD = math.pi / 180
 VEC3_UP = np.array([0, 0, 1], dtype=np.float64)
-VEC3_ZERO = np.zeros(3)
+ZERO3 = np.zeros(3)
 
 ###############################################################################
 # PATH

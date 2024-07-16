@@ -50,6 +50,8 @@ def low_level_control(drone: int, conn):
                 controller.sendStopCmd(*args)
             elif cmd == Command.NOTIFY:
                 controller.notifySetpointStop(*args)
+            else:
+                continue
             controller.process_command_queue(args[-1])
             conn.send("ok")
         else:
@@ -130,13 +132,13 @@ class MellingerControl(BaseControl):
         self.full_state_cmd_override = True  # When true, high level commander is not called
 
         self.firm.controllerMellingerInit()
-        # logger.debug("Mellinger controller init test:", firm.controllerMellingerTest())
+        # print("Mellinger controller init test:", self.firm.controllerMellingerTest())
 
         # observations about the drone owned by this controller
         drone = init_obs[self.drone_id, :12]
 
         self.firm.crtpCommanderHighLevelInit()
-        self._update_state(0, drone[:3], drone[6:9], VEC3_UP, drone[3:6])
+        self._update_state(0, drone[:3], drone[6:9], VEC3_UP, drone[3:6] * RAD_TO_DEG)
 
         self.prev_rpy = drone[3:6]
         self.prev_vel = drone[6:9]
@@ -209,7 +211,7 @@ class MellingerControl(BaseControl):
             cur_pos,
             cur_vel,
             cur_acc,
-            cur_rpy,
+            cur_rpy * RAD_TO_DEG,
         )
 
         # Update sensor data
@@ -235,7 +237,7 @@ class MellingerControl(BaseControl):
         clipped_pwms = np.clip(np.array(pwms), MIN_PWM, MAX_PWM)
         # clipped_pwms = np.array([65319.02972592, 65535., 65535., 65535.])
         thrust = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
-        thrust = thrust[[3, 2, 1, 0]]
+        # thrust = thrust[[3, 2, 1, 0]]
 
         # convert to quad motor rpm commands
         pwms = self._thr2pwm(
@@ -438,19 +440,17 @@ class MellingerControl(BaseControl):
         acc_t acc;                // Gs (but acc.z without considering gravity)
         """
         # RPY required for PID and high level commander
-        temp_rpy = rpy * np.array([1, -1, 1]) # Legacy representation in CF firmware
         self._update_vector(
             self.state.attitude,
             ("roll", "pitch", "yaw", "timestamp"),
-            [*temp_rpy, timestamp]
+            [*(rpy * np.array([1, -1, 1])), timestamp] # legacy inverted pitch
         )
 
         # Quat required for Mellinger
-        rpy_quat = get_quaternion_from_euler(*temp_rpy)
         self._update_vector(
             self.state.attitudeQuaternion,
             ("x", "y", "z", "w", "timestamp"),
-            [*rpy_quat, timestamp]
+            [*get_quaternion_from_euler(*(rpy * DEG_TO_RAD)), timestamp]
         )
 
         self._update_vector(self.state.position, values=[*pos, timestamp])

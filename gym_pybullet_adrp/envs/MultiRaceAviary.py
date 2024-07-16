@@ -141,7 +141,7 @@ class MultiRaceAviary(BaseAviary):
             command = ("reset", (initial_obs, initial_info))
             connection.send(command)
 
-        self.drones_eliminated = np.array([False] * self.NUM_DRONES)
+        self.drones_eliminated = np.zeros(self.NUM_DRONES, dtype=bool)
         self.step_counter = 0
         self.rpms = np.zeros((self.NUM_DRONES, 4))
         self.prev_rpms = np.zeros((self.NUM_DRONES, 4))
@@ -172,7 +172,7 @@ class MultiRaceAviary(BaseAviary):
         if isinstance(action, np.ndarray):
             action = [(
                 Command.FULLSTATE,
-                (act[:3], VEC3_ZERO, VEC3_ZERO, act[3], VEC3_ZERO, self.step_counter)
+                (act[:3], ZERO3, ZERO3, act[3], ZERO3, self.step_counter)
             ) for act in action]
 
         # send high-level commands to each drone (e.g. FULLSTATE + args)
@@ -190,6 +190,10 @@ class MultiRaceAviary(BaseAviary):
 
             # Step the simulation using the desired physics update
             self._apply_physics(self.rpms, self.prev_rpms)
+
+            # Update and store the drones kinematic information
+            self._updateAndStoreKinematicInformation()
+
             obs = self._computeObs()
 
             # update the state of mellinger controller
@@ -201,8 +205,8 @@ class MultiRaceAviary(BaseAviary):
                         obs[i, :3], # pos
                         obs[i, 3:6], # rpy
                         obs[i, 6:9], # vel
-                        VEC3_ZERO,
-                        VEC3_ZERO
+                        ZERO3,
+                        ZERO3
                     )
                 )
                 connection.send(command)
@@ -213,8 +217,6 @@ class MultiRaceAviary(BaseAviary):
                 # get motor rpms from mellinger controllers
                 self.rpms[i] = connection.recv()
 
-        # Update and store the drones kinematic information
-        self._updateAndStoreKinematicInformation()
 
         # Track gate progress
         for i in range(self.NUM_DRONES):
@@ -397,7 +399,7 @@ class MultiRaceAviary(BaseAviary):
 
     def _apply_physics(self, action, prev_action, disturbance=None):
         """Apply pybullet physics to the drones for one step."""
-        for i in range (self.NUM_DRONES):
+        for i in range(self.NUM_DRONES):
             if self.PHYSICS == Physics.PYB:
                 self._physics(action[i, :], i)
             elif self.PHYSICS == Physics.DYN:
@@ -417,15 +419,15 @@ class MultiRaceAviary(BaseAviary):
                 self._drag(prev_action[i, :], i)
                 self._downwash(i)
 
-        if disturbance is not None:
-            pos = self._getDroneStateVector(i)[:3]
-            pb.applyExternalForce(
-                self.DRONE_IDS[i],
-                linkIndex=4,  # Link attached to the quadrotor's center of mass.
-                forceObj=disturbance,
-                posObj=pos,
-                flags=pb.WORLD_FRAME,
-                physicsClientId=self.CLIENT)
+            if disturbance is not None:
+                pos = self._getDroneStateVector(i)[:3]
+                pb.applyExternalForce(
+                    self.DRONE_IDS[i],
+                    linkIndex=4,  # Link attached to the quadrotor's center of mass.
+                    forceObj=disturbance,
+                    posObj=pos,
+                    flags=pb.WORLD_FRAME,
+                    physicsClientId=self.CLIENT)
         #### PyBullet computes the new state, unless Physics.DYN ###
         if self.PHYSICS != Physics.DYN:
             pb.stepSimulation(physicsClientId=self.CLIENT)
