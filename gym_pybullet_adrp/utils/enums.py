@@ -12,7 +12,6 @@ class DroneModel(Enum):
     CF2P = "cf2p"   # Bitcraze Craziflie 2.0 in the + configuration
     RACE = "racer"  # Racer drone in the X configuration
 
-
 ###############################################################################
 
 class Physics(Enum):
@@ -69,6 +68,7 @@ class Command(Enum):
     NOTIFY = "ntf"
     NONE = "non"
 
+###############################################################################
 
 class State(Enum):
     """State machine controlled behaviour states"""

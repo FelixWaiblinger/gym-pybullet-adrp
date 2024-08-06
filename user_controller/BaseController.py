@@ -57,6 +57,8 @@ class BaseController(ABC):
         self.done_buffer = deque([], maxlen=self.buffer_size)
         self.info_buffer = deque([], maxlen=self.buffer_size)
 
+        # NOTE: can be implemented by its subclasses
+
 ###############################################################################
 
     def episode_reset(self):
@@ -119,3 +121,4 @@ class BaseController(ABC):
         ep_time: float=None
     ) -> np.ndarray:
         """Predict the next action."""
+        # NOTE: must be implemented by its subclasses

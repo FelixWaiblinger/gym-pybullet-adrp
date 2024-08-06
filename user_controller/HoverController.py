@@ -3,7 +3,7 @@
 import numpy as np
 
 from user_controller import BaseController
-from gym_pybullet_adrp.utils.enums import Command
+
 
 class HoverController(BaseController):
     """Base class for control.
@@ -22,4 +22,4 @@ class HoverController(BaseController):
         ep_time: float=None
     ) -> np.ndarray:
         """Predict the next action."""
-        return np.array([1.5, 0.5, 1 + self.drone_id, 0], dtype=np.float64)
+        return np.array([1.5, 0.5, 1 + self.drone_id, 0])

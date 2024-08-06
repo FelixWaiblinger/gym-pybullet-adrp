@@ -18,9 +18,6 @@ def simulate(
     controller: str | List[str]=[
         "user_controller/HardCodedController.py",
         "user_controller/HardCodedController2.py",
-        # "user_controller/HoverController.py",
-        # "user_controller/HoverController.py",
-        # "user_controller/HoverController2.py"
     ],
     n_runs: int=10,
     n_drones: int=2,

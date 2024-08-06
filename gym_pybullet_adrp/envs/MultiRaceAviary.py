@@ -10,8 +10,7 @@ from gymnasium import spaces
 from gym_pybullet_adrp.envs.BaseAviary import BaseAviary
 from gym_pybullet_adrp.control import low_level_control
 from gym_pybullet_adrp.utils.constants import *
-from gym_pybullet_adrp.utils.enums import \
-    DroneModel, Physics, ActionType, ObservationType, ImageType, Command
+from gym_pybullet_adrp.utils.enums import *
 
 
 KIN_PHYSICS = [
@@ -28,7 +27,8 @@ class MultiRaceAviary(BaseAviary):
 
     ################################################################################
 
-    def __init__(self,
+    def __init__(
+        self,
         race_config: Munch,
         drone_model: DroneModel=DroneModel.CF2X,
         num_drones: int=2,
@@ -92,7 +92,7 @@ class MultiRaceAviary(BaseAviary):
             pyb_freq=pyb_freq,
             ctrl_freq=ctrl_freq,
             gui=gui,
-            record=record,
+            record=record
         )
 
         assert drone_model in [DroneModel.CF2X, DroneModel.CF2P], \
@@ -117,7 +117,7 @@ class MultiRaceAviary(BaseAviary):
 
 ###############################################################################
 
-    def reset(self, seed : int = None, options : dict = None):
+    def reset(self, seed: int=None, options: dict=None):
         """Resets the environment.
 
         Parameters
@@ -324,6 +324,7 @@ class MultiRaceAviary(BaseAviary):
             g_distrib = getattr(np.random, g_info.distrib)
             g_low, g_high = g_info.range
             g_offsets = g_distrib(g_low, g_high, size=(num_gates, 3))
+
             for n, o in zip(self.gates_nominal, g_offsets):
                 temp = np.array(n)
                 temp[[0, 1, 5]] += o
@@ -334,6 +335,7 @@ class MultiRaceAviary(BaseAviary):
             o_distrib = getattr(np.random, o_info.distrib)
             o_low, o_high = o_info.range
             o_offsets = o_distrib(o_low, o_high, size=(num_obstacles, 2))
+
             for n, o in zip(self.obstacles_nominal, o_offsets):
                 temp = np.array(n)
                 temp[[0, 1]] += o
@@ -367,31 +369,34 @@ class MultiRaceAviary(BaseAviary):
     def _gate_progress(self, drone_id: int):
         current_gate = int(self.current_gate[drone_id])
 
-        if (
-            # self.pyb_step_counter > 0.5 * self.PYB_FREQ and
-            self.num_gates > 0 and
-            current_gate < self.num_gates
-        ):
+        if (self.num_gates > 0 and current_gate < self.num_gates):
             x, y, _, _, _, rot = self.gates_actual[current_gate]
-            if self.config.gates[current_gate][6] == 0: # TODO
+
+            if self.config.gates[current_gate][6] == 0:
                 height = Z_HIGH  # URDF dependent.
             elif self.config.gates[current_gate][6] == 1:
                 height = Z_LOW  # URDF dependent.
             else:
                 raise ValueError("Unknown gate type.")
+
             half_length = 0.1875  # Obstacle URDF dependent.
             delta_x = 0.05 * np.cos(rot)
             delta_y = 0.05 * np.sin(rot)
             fr = [[x, y, height - half_length]]
             to = [[x, y, height + half_length]]
+
             for i in [1, 2, 3]:
                 fr.append([x + i * delta_x, y + i * delta_y, height - half_length])
                 fr.append([x - i * delta_x, y - i * delta_y, height - half_length])
                 to.append([x + i * delta_x, y + i * delta_y, height + half_length])
                 to.append([x - i * delta_x, y - i * delta_y, height + half_length])
+
             rays = pb.rayTestBatch(
-                rayFromPositions=fr, rayToPositions=to, physicsClientId=self.CLIENT
+                rayFromPositions=fr,
+                rayToPositions=to,
+                physicsClientId=self.CLIENT
             )
+
             if any(r[2] < 0.9999 for r in rays):
                 self.current_gate[drone_id] += 1
 
@@ -428,6 +433,7 @@ class MultiRaceAviary(BaseAviary):
                     posObj=pos,
                     flags=pb.WORLD_FRAME,
                     physicsClientId=self.CLIENT)
+
         #### PyBullet computes the new state, unless Physics.DYN ###
         if self.PHYSICS != Physics.DYN:
             pb.stepSimulation(physicsClientId=self.CLIENT)
@@ -436,6 +442,7 @@ class MultiRaceAviary(BaseAviary):
 
     def _collision(self, drone_id: int):
         objects = self.gates_urdf + self.obstacles_urdf + [self.PLANE_ID]
+
         if self.drone_collisions:
             objects += [d for i, d in enumerate(self.DRONE_IDS) if i != drone_id]
 
@@ -446,7 +453,6 @@ class MultiRaceAviary(BaseAviary):
                 bodyB=self.DRONE_IDS[drone_id],
                 physicsClientId=self.CLIENT,
             ):
-                # print(f"collided with {obj_id}")
                 return obj_id
 
         return None
@@ -462,7 +468,7 @@ class MultiRaceAviary(BaseAviary):
             depending on the observation type.
         """
         if self.observation_type == ObservationType.RGB:
-            if self.step_counter%self.IMG_CAPTURE_FREQ == 0:
+            if self.step_counter % self.IMG_CAPTURE_FREQ == 0:
                 for i in range(self.NUM_DRONES):
                     self.rgb[i], self.dep[i], self.seg[i] = \
                         self._getDroneImages(i, segmentation=False)
@@ -473,7 +479,7 @@ class MultiRaceAviary(BaseAviary):
                             img_type=ImageType.RGB,
                             img_input=self.rgb[i],
                             path=self.ONBOARD_IMG_PATH+"drone_"+str(i),
-                            frame_num=int(self.step_counter/self.IMG_CAPTURE_FREQ)
+                            frame_num=int(self.step_counter / self.IMG_CAPTURE_FREQ)
                         )
             return np.array([self.rgb[i] for i in range(self.NUM_DRONES)]).astype('float32')
 
@@ -559,7 +565,6 @@ class MultiRaceAviary(BaseAviary):
             state = self._getDroneStateVector(i)
 
             out_of_bounds = np.any(np.abs(state[:3]) > self.env_bounds[1])
-            # print("Unstable: ", np.abs(state[13:16]))
             # unstable = np.any(np.abs(state[13:16]) > 20) # TODO replace arbitrary theshold
             unstable = False
             crashed = self._collision(i) is not None
@@ -589,4 +594,5 @@ class MultiRaceAviary(BaseAviary):
         
         NOTE: Unused
         """
-        return {"answer": 42} #### Calculated by the Deep Thought supercomputer in 7.5M years
+        #### Calculated by the Deep Thought supercomputer in 7.5M years
+        return {"answer": 42}

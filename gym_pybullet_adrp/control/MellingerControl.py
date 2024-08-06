@@ -18,12 +18,13 @@ def low_level_control(drone: int, conn):
     """Low-level control function to be run by an external process."""
     controller = MellingerControl(drone, DroneModel.CF2X)
 
+    # controller waits for commands until being shutdown
     while True:
         command, args = conn.recv()
 
         if command == "reset":
-            obs, info = args
-            controller.reset(obs, info)
+            obs, _ = args
+            controller.reset(obs)
         elif command == "step":
             t, pos, rpy, vel, acc, ang = args
             rpm = controller.computeControl(t, pos, rpy, vel, acc, ang)[0]
@@ -53,7 +54,7 @@ def low_level_control(drone: int, conn):
             else:
                 continue
             controller.process_command_queue(args[-1])
-            conn.send("ok")
+            conn.send("ok") # NOTE: for synchronization
         else:
             conn.close()
             return
@@ -64,7 +65,8 @@ class MellingerControl(BaseControl):
 
     ################################################################################
 
-    def __init__(self,
+    def __init__(
+        self,
         drone_id: int,
         drone_model: DroneModel,
         g: float=9.8
@@ -93,7 +95,7 @@ class MellingerControl(BaseControl):
 
 ###############################################################################
 
-    def reset(self, init_obs, init_info):
+    def reset(self, init_obs):
         """Resets the control classes.
 
         Copied and slightly modified from safe-control-gym.firmware_wrapper
@@ -129,10 +131,12 @@ class MellingerControl(BaseControl):
         self._error = False
         self.sensor_data_set = False
         self.state_set = False
-        self.full_state_cmd_override = True  # When true, high level commander is not called
+
+        # When true, high level commander is not called
+        self.full_state_cmd_override = True
 
         self.firm.controllerMellingerInit()
-        # print("Mellinger controller init test:", self.firm.controllerMellingerTest())
+        # print("Mellinger init test:", self.firm.controllerMellingerTest())
 
         # observations about the drone owned by this controller
         drone = init_obs[self.drone_id, :12]
@@ -146,17 +150,18 @@ class MellingerControl(BaseControl):
 
 ###############################################################################
 
-    def computeControl(self,
-                       control_timestep,
-                       cur_pos,
-                       cur_rpy,
-                       cur_vel,
-                       cur_ang_vel,
-                       target_pos,
-                       target_rpy=np.zeros(3),
-                       target_vel=np.zeros(3),
-                       target_rpy_rates=np.zeros(3)
-                       ):
+    def computeControl(
+        self,
+        control_timestep,
+        cur_pos,
+        cur_rpy,
+        cur_vel,
+        cur_ang_vel,
+        target_pos,
+        target_rpy=np.zeros(3),
+        target_vel=np.zeros(3),
+        target_rpy_rates=np.zeros(3)
+    ):
         """Computes the Mellinger control action (as RPMs) for a single drone.
 
         This methods sequentially calls `_dslPIDPositionControl()` and `_dslPIDAttitudeControl()`.
@@ -234,16 +239,19 @@ class MellingerControl(BaseControl):
         # Step controller
         pwms = self._step_controller()
 
+        # =====================================
+        # TODO: check whether we need all this?
         clipped_pwms = np.clip(np.array(pwms), MIN_PWM, MAX_PWM)
-        # clipped_pwms = np.array([65319.02972592, 65535., 65535., 65535.])
         thrust = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
-        # thrust = thrust[[3, 2, 1, 0]]
+        # thrust = thrust[[3, 2, 1, 0]] # assign values to correct motor
 
         # convert to quad motor rpm commands
         pwms = self._thr2pwm(
             thrust, PWM2RPM_SCALE, PWM2RPM_CONST, self.KF, MIN_PWM, MAX_PWM
         )
-        rpms = self._pwm2rpm(pwms, PWM2RPM_SCALE, PWM2RPM_CONST)
+        # =====================================
+
+        rpms = PWM2RPM_SCALE * pwms + PWM2RPM_CONST
 
         return rpms, None, None
 
@@ -252,7 +260,8 @@ class MellingerControl(BaseControl):
 # region CONTROLLER
 
     def _init_variables(self):
-        self.KF = 3.16e-10 # NOTE: taken from safe-control-gym.firmware_wrapper
+        # NOTE: taken from safe-control-gym.firmware_wrapper
+        self.KF = 3.16e-10
         self.KM = self._getURDFParameter('km')
         self.prev_rpy = np.zeros(3)
         self.prev_vel = np.zeros(3)
@@ -275,6 +284,9 @@ class MellingerControl(BaseControl):
 ###############################################################################
 
     def process_command_queue(self, sim_time):
+        """Pop and execute next command in the queue using the high-level
+        controller.
+        """
         if len(self.command_queue) > 0:
             # Reset planner object
             self.firm.crtpCommanderHighLevelStop()
@@ -305,35 +317,24 @@ class MellingerControl(BaseControl):
 
         """
         n_motor = 4 // int(thrust.size)
-        thrust = np.clip(thrust, np.zeros_like(thrust), None)  # Make sure thrust is not negative.
+
+        # Make sure thrust is not negative.
+        thrust = np.clip(thrust, np.zeros_like(thrust), None)
+
         motor_pwm = (np.sqrt(thrust / n_motor / ct) - pwm2rpm_const) / pwm2rpm_scale
-        if thrust.size == 1:  # 1D case.
+
+        if thrust.size == 1:  # 1D case
             motor_pwm = np.repeat(motor_pwm, 4)
-        elif thrust.size == 2:  # 2D case.
+        elif thrust.size == 2:  # 2D case
             motor_pwm = np.concatenate([motor_pwm, motor_pwm[::-1]], 0)
-        elif thrust.size == 4:  # 3D case.
+        elif thrust.size == 4:  # 3D case
             motor_pwm = np.array(motor_pwm)
         else:
             raise ValueError("Input action shape not supported.")
+
         motor_pwm = np.clip(motor_pwm, pwm_min, pwm_max)
+
         return motor_pwm
-
-###############################################################################
-
-    def _pwm2rpm(self, pwm, pwm2rpm_scale, pwm2rpm_const):
-        """Computes motor squared rpm from pwm.
-
-        Args:
-            pwm (ndarray): Array of length 4 containing PWM.
-            pwm2rpm_scale (float): Scaling factor between PWM and RPMs.
-            pwm2rpm_const (float): Constant factor between PWM and RPMs.
-
-        Returns:
-            ndarray: Array of length 4 containing RPMs.
-
-        """
-        rpm = pwm2rpm_scale * pwm + pwm2rpm_const
-        return rpm
 
 ###############################################################################
 
@@ -362,7 +363,7 @@ class MellingerControl(BaseControl):
     def _update_setpoint(self, timestep):
         if not self.full_state_cmd_override:
             self.firm.crtpCommanderHighLevelTellState(self.state)
-            # Sets commander time variable --- this is time in s from start of flight
+            # Sets commander time variable (time in s from start of flight)
             self.firm.crtpCommanderHighLevelUpdateTime(timestep)
             self.firm.crtpCommanderHighLevelGetSetpoint(self.setpoint, self.state)
 
@@ -386,17 +387,22 @@ class MellingerControl(BaseControl):
         # Determine tick based on time passed, allowing us to run pid slower than the 1000Hz it was
         # designed for
         cur_time = self.tick / FIRMWARE_FREQ
-        if (cur_time - self.last_att_pid_call > 0.002) and (
-            cur_time - self.last_pos_pid_call > 0.01
-        ):
-            _tick = 0  # Runs position and attitude controller
+
+        # Runs position and attitude controller
+        if (cur_time - self.last_att_pid_call > 0.002) and \
+           (cur_time - self.last_pos_pid_call > 0.01):
+            _tick = 0
             self.last_pos_pid_call = cur_time
             self.last_att_pid_call = cur_time
+
+        # Runs attitude controller
         elif cur_time - self.last_att_pid_call > 0.002:
             self.last_att_pid_call = cur_time
-            _tick = 2  # Runs attitude controller
+            _tick = 2
+
+        # Runs neither controller
         else:
-            _tick = 1  # Runs neither controller
+            _tick = 1
 
         self.firm.controllerMellinger(
             self.control, self.setpoint, self.sensor_data, self.state, _tick
@@ -426,8 +432,8 @@ class MellingerControl(BaseControl):
         volts = -0.0006239 * thrust**2 + 0.088 * thrust
         percentage = np.minimum(1, volts / SUPPLY_VOLTAGE)
         motor_pwms = percentage * MAX_PWM
+
         return motor_pwms # NOTE: return unclipped because of MOTOR_SET_ENABLE
-        # return np.clip(motor_pwms, MIN_PWM, MAX_PWM)
 
 ###############################################################################
 
@@ -490,7 +496,8 @@ class MellingerControl(BaseControl):
             rpy_rate (list): roll, pitch, yaw rates (rad/s)
             timestep (float): simulation time when command is sent (s)
         """
-        self.command_queue += [["_sendFullStateCmd", [pos, vel, acc, yaw, rpy_rate, timestep]]]
+        self.command_queue += \
+            [["_sendFullStateCmd", [pos, vel, acc, yaw, rpy_rate, timestep]]]
 
 ###############################################################################
 
@@ -510,7 +517,7 @@ class MellingerControl(BaseControl):
         self.setpoint.attitudeRate.yaw = rpy_rate[2] * RAD_TO_DEG
 
         quat = get_quaternion_from_euler(0, 0, yaw)
-        self.setpoint.attitudeQuaternion.x = quat[0]        
+        self.setpoint.attitudeQuaternion.x = quat[0]
         self.setpoint.attitudeQuaternion.y = quat[1]
         self.setpoint.attitudeQuaternion.z = quat[2]
         self.setpoint.attitudeQuaternion.w = quat[3]
@@ -525,7 +532,7 @@ class MellingerControl(BaseControl):
         self.setpoint.mode.pitch = self.firm.modeDisable
         self.setpoint.mode.yaw = self.firm.modeDisable
 
-        # TODO: This may end up skipping control loops
+        # NOTE: This may end up skipping control loops
         self.setpoint.timestamp = int(timestep * 1000)
         self.full_state_cmd_override = True
 
@@ -665,7 +672,8 @@ class MellingerControl(BaseControl):
             duration_s (float): length of manuever
             relative (bool): whether setpoint is relative to CF's current position
         """
-        self.command_queue += [["_sendGotoCmd", [pos, yaw, duration_s, relative]]]
+        self.command_queue += \
+            [["_sendGotoCmd", [pos, yaw, duration_s, relative]]]
 
 ###############################################################################
 

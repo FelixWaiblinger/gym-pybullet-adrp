@@ -1,9 +1,12 @@
-import os
-import numpy as np
+"""Base Low-Level Controller"""
+
 import xml.etree.ElementTree as etxml
+
+import numpy as np
 import pkg_resources
 
 from gym_pybullet_adrp.utils.enums import DroneModel
+
 
 class BaseControl(object):
     """Base class for control.
@@ -15,10 +18,7 @@ class BaseControl(object):
 
     ################################################################################
 
-    def __init__(self,
-                 drone_model: DroneModel,
-                 g: float=9.8
-                 ):
+    def __init__(self, drone_model: DroneModel, g: float=9.8):
         """Common control classes __init__ method.
 
         Parameters
@@ -52,14 +52,15 @@ class BaseControl(object):
 
     ################################################################################
 
-    def computeControlFromState(self,
-                                control_timestep,
-                                state,
-                                target_pos,
-                                target_rpy=np.zeros(3),
-                                target_vel=np.zeros(3),
-                                target_rpy_rates=np.zeros(3)
-                                ):
+    def computeControlFromState(
+        self,
+        control_timestep,
+        state,
+        target_pos,
+        target_rpy=np.zeros(3),
+        target_vel=np.zeros(3),
+        target_rpy_rates=np.zeros(3)
+    ):
         """Interface method using `computeControl`.
 
         It can be used to compute a control action directly from the value of key "state"
@@ -81,30 +82,32 @@ class BaseControl(object):
             (3,1)-shaped array of floats containing the desired roll, pitch, and yaw rates.
 
         """
-        return self.computeControl(control_timestep=control_timestep,
-                                   cur_pos=state[0:3],
-                                   cur_quat=state[3:7],
-                                   cur_vel=state[10:13],
-                                   cur_ang_vel=state[13:16],
-                                   target_pos=target_pos,
-                                   target_rpy=target_rpy,
-                                   target_vel=target_vel,
-                                   target_rpy_rates=target_rpy_rates
-                                   )
+        return self.computeControl(
+            control_timestep=control_timestep,
+            cur_pos=state[0:3],
+            cur_quat=state[3:7],
+            cur_vel=state[10:13],
+            cur_ang_vel=state[13:16],
+            target_pos=target_pos,
+            target_rpy=target_rpy,
+            target_vel=target_vel,
+            target_rpy_rates=target_rpy_rates
+        )
 
     ################################################################################
 
-    def computeControl(self,
-                       control_timestep,
-                       cur_pos,
-                       cur_quat,
-                       cur_vel,
-                       cur_ang_vel,
-                       target_pos,
-                       target_rpy=np.zeros(3),
-                       target_vel=np.zeros(3),
-                       target_rpy_rates=np.zeros(3)
-                       ):
+    def computeControl(
+        self,
+        control_timestep,
+        cur_pos,
+        cur_quat,
+        cur_vel,
+        cur_ang_vel,
+        target_pos,
+        target_rpy=np.zeros(3),
+        target_vel=np.zeros(3),
+        target_rpy_rates=np.zeros(3)
+    ):
         """Abstract method to compute the control action for a single drone.
 
         It must be implemented by each subclass of `BaseControl`.
@@ -135,14 +138,15 @@ class BaseControl(object):
 
 ################################################################################
 
-    def setPIDCoefficients(self,
-                           p_coeff_pos=None,
-                           i_coeff_pos=None,
-                           d_coeff_pos=None,
-                           p_coeff_att=None,
-                           i_coeff_att=None,
-                           d_coeff_att=None
-                           ):
+    def setPIDCoefficients(
+        self,
+        p_coeff_pos=None,
+        i_coeff_pos=None,
+        d_coeff_pos=None,
+        p_coeff_att=None,
+        i_coeff_att=None,
+        d_coeff_att=None
+    ):
         """Sets the coefficients of a PID controller.
 
         This method throws an error message and exist is the coefficients
@@ -177,10 +181,11 @@ class BaseControl(object):
             self.D_COEFF_TOR = self.D_COEFF_TOR if d_coeff_att is None else d_coeff_att
 
     ################################################################################
-    
-    def _getURDFParameter(self,
-                          parameter_name: str
-                          ):
+
+    def _getURDFParameter(
+        self,
+        parameter_name: str
+    ):
         """Reads a parameter from a drone's URDF file.
 
         This method is nothing more than a custom XML parser for the .urdf
@@ -199,15 +204,18 @@ class BaseControl(object):
         """
         #### Get the XML tree of the drone model to control ########
         URDF = self.DRONE_MODEL.value + ".urdf"
-        path = pkg_resources.resource_filename('gym_pybullet_adrp', 'assets/'+URDF)
+        path = pkg_resources.resource_filename('gym_pybullet_adrp', 'assets/' + URDF)
         URDF_TREE = etxml.parse(path).getroot()
+
         #### Find and return the desired parameter #################
         if parameter_name == 'm':
             return float(URDF_TREE[1][0][1].attrib['value'])
         elif parameter_name in ['ixx', 'iyy', 'izz']:
             return float(URDF_TREE[1][0][2].attrib[parameter_name])
-        elif parameter_name in ['arm', 'thrust2weight', 'kf', 'km', 'max_speed_kmh', 'gnd_eff_coeff' 'prop_radius', \
-                                'drag_coeff_xy', 'drag_coeff_z', 'dw_coeff_1', 'dw_coeff_2', 'dw_coeff_3']:
+        elif parameter_name in ['arm', 'thrust2weight', 'kf', 'km',
+                                'max_speed_kmh', 'gnd_eff_coeff' 'prop_radius',
+                                'drag_coeff_xy', 'drag_coeff_z', 'dw_coeff_1',
+                                'dw_coeff_2', 'dw_coeff_3']:
             return float(URDF_TREE[0].attrib[parameter_name])
         elif parameter_name in ['length', 'radius']:
             return float(URDF_TREE[1][2][1][0].attrib[parameter_name])

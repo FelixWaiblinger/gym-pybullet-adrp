@@ -94,9 +94,6 @@ class HardCodedController(BaseController):
                 -0.5,
                 -1.2,
                 z_high
-                # initial_info["x_reference"][0],
-                # initial_info["x_reference"][2],
-                # initial_info["x_reference"][4],
             ]
         )
         waypoints.append(
@@ -104,14 +101,11 @@ class HardCodedController(BaseController):
                 -0.5,
                 -1.4,
                 z_high
-                # initial_info["x_reference"][0],
-                # initial_info["x_reference"][2] - 0.2,
-                # initial_info["x_reference"][4],
             ]
         )
         waypoints = np.array(waypoints)
 
-        tck, u = interpolate.splprep([waypoints[:, 0], waypoints[:, 1], waypoints[:, 2]], s=0.1)
+        tck, _ = interpolate.splprep([waypoints[:, 0], waypoints[:, 1], waypoints[:, 2]], s=0.1)
         self.waypoints = waypoints
         duration = 12
         t = np.linspace(0, 1, int(duration * self.CTRL_FREQ))
