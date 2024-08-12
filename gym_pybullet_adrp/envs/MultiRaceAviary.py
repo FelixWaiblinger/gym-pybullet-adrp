@@ -38,7 +38,7 @@ class MultiRaceAviary(BaseAviary):
         ctrl_freq: int=CTRL_FREQ,
         gui: bool=False,
         record: bool=False,
-        drone_collisions: bool=False,
+        racemode: RaceMode=RaceMode.COMPARE,
         obs: ObservationType=ObservationType.KIN,
         act: ActionType=ActionType.PID
     ):
@@ -74,13 +74,15 @@ class MultiRaceAviary(BaseAviary):
         self.config = race_config
         self.observation_type = obs
         self.action_type = act
-        self.drone_collisions = drone_collisions
+        self.racemode = racemode
         self.gates_urdf, self.obstacles_urdf = [], []
         self.gates_nominal, self.obstacles_nominal = [], []
         self.gates_actual, self.obstacles_actual = [], []
+        self.collision_objects = []
         self.num_gates = len(self.config.gates)
         self.current_gate = np.zeros(num_drones)
         self.env_bounds = np.array(self.config.bounds) # NOTE: see config
+        self.done_on_completion = self.config.done_on_completion
 
         super().__init__(
             drone_model=drone_model,
@@ -92,6 +94,7 @@ class MultiRaceAviary(BaseAviary):
             pyb_freq=pyb_freq,
             ctrl_freq=ctrl_freq,
             gui=gui,
+            obstacles=True,
             record=record
         )
 
@@ -114,6 +117,7 @@ class MultiRaceAviary(BaseAviary):
         self.rpms = np.zeros((self.NUM_DRONES, 4))
         self.prev_rpms = np.zeros((self.NUM_DRONES, 4))
         self.drones_eliminated = np.zeros(num_drones, dtype=bool)
+        self.drones_finished = np.zeros(num_drones, dtype=bool)
 
 ###############################################################################
 
@@ -132,8 +136,8 @@ class MultiRaceAviary(BaseAviary):
         ndarray: Initial observations according to `_computeObs()`
         dict: Initial additional information according to `_computeInfo()`
         """
+        # self._build_racetrack()
         initial_obs, initial_info = super().reset(seed, options)
-        self._build_racetrack()
         self.current_gate = np.zeros(self.NUM_DRONES)
 
         # reset mellinger controllers
@@ -141,7 +145,17 @@ class MultiRaceAviary(BaseAviary):
             command = ("reset", (initial_obs, initial_info))
             connection.send(command)
 
+        self.collision_objects = self.gates_urdf + self.obstacles_urdf + [self.PLANE_ID]
+        # add drones to collision objects to detect elimination from race
+        if self.racemode == RaceMode.COMPETE:
+            self.collision_objects += self.DRONE_IDS
+        # disable drone collisions
+        else:
+            for i in self.DRONE_IDS:
+                for j in self.DRONE_IDS:
+                    pb.setCollisionFilterPair(i, j, -1, -1, 0)
         self.drones_eliminated = np.zeros(self.NUM_DRONES, dtype=bool)
+        self.drones_finished = np.zeros(self.NUM_DRONES, dtype=bool)
         self.step_counter = 0
         self.rpms = np.zeros((self.NUM_DRONES, 4))
         self.prev_rpms = np.zeros((self.NUM_DRONES, 4))
@@ -306,7 +320,7 @@ class MultiRaceAviary(BaseAviary):
 
 ###############################################################################
 
-    def _build_racetrack(self):
+    def _addObstacles(self):
         """Add gates and obstacles to the environment.
 
         Overrides BaseAviary's method.
@@ -320,7 +334,7 @@ class MultiRaceAviary(BaseAviary):
 
         if self.config.random_gates_obstacles:
             # randomly offset position and yaw of gates
-            g_info = self.config.random_gates_obstacles.gates
+            g_info = self.config.random_gates_obstacles_info.gates
             g_distrib = getattr(np.random, g_info.distrib)
             g_low, g_high = g_info.range
             g_offsets = g_distrib(g_low, g_high, size=(num_gates, 3))
@@ -331,7 +345,7 @@ class MultiRaceAviary(BaseAviary):
                 self.gates_actual.append(temp.tolist())
 
             # randomly offset position of obstacles
-            o_info = self.config.random_gates_obstacles.obstacles
+            o_info = self.config.random_gates_obstacles_info.obstacles
             o_distrib = getattr(np.random, o_info.distrib)
             o_low, o_high = o_info.range
             o_offsets = o_distrib(o_low, o_high, size=(num_obstacles, 2))
@@ -367,15 +381,16 @@ class MultiRaceAviary(BaseAviary):
 ###############################################################################
 
     def _gate_progress(self, drone_id: int):
-        current_gate = int(self.current_gate[drone_id])
+        gate = int(self.current_gate[drone_id])
+        print(drone_id, gate)
 
-        if (self.num_gates > 0 and current_gate < self.num_gates):
-            x, y, _, _, _, rot = self.gates_actual[current_gate]
+        if (self.num_gates > 0 and gate < self.num_gates):
+            x, y, _, _, _, rot = self.gates_actual[gate]
 
-            if self.config.gates[current_gate][6] == 0:
-                height = Z_HIGH  # URDF dependent.
-            elif self.config.gates[current_gate][6] == 1:
-                height = Z_LOW  # URDF dependent.
+            if self.config.gates[gate][6] == 0:
+                height = 1.0 #Z_HIGH  # URDF dependent.
+            elif self.config.gates[gate][6] == 1:
+                height = 0.525 #Z_LOW  # URDF dependent.
             else:
                 raise ValueError("Unknown gate type.")
 
@@ -397,8 +412,11 @@ class MultiRaceAviary(BaseAviary):
                 physicsClientId=self.CLIENT
             )
 
-            if any(r[2] < 0.9999 for r in rays):
+            if any(r[2] < 0.9999 and r[0] == self.DRONE_IDS[drone_id] for r in rays):
                 self.current_gate[drone_id] += 1
+
+        if gate >= self.num_gates:
+            self.drones_finished[drone_id] = True
 
 ###############################################################################
 
@@ -441,12 +459,7 @@ class MultiRaceAviary(BaseAviary):
 ###############################################################################
 
     def _collision(self, drone_id: int):
-        objects = self.gates_urdf + self.obstacles_urdf + [self.PLANE_ID]
-
-        if self.drone_collisions:
-            objects += [d for i, d in enumerate(self.DRONE_IDS) if i != drone_id]
-
-        for obj_id in objects:
+        for obj_id in self.collision_objects:
             # NOTE: only returning the first collision per step
             if pb.getContactPoints(
                 bodyA=obj_id,
@@ -574,7 +587,13 @@ class MultiRaceAviary(BaseAviary):
 
             self.drones_eliminated[i] = out_of_bounds or unstable or crashed
 
-        return np.all(self.drones_eliminated)
+        all_crashed = np.all(self.drones_eliminated)
+        all_finished = np.all(self.drones_finished)
+        crsh_or_fin = np.logical_or(self.drones_eliminated, self.drones_finished)
+
+        # print(f"{all_crashed = }, {all_finished = }, {crsh_or_fin = }")
+
+        return all_crashed or all_finished or np.all(crsh_or_fin)
 
 ###############################################################################
 
@@ -596,3 +615,9 @@ class MultiRaceAviary(BaseAviary):
         """
         #### Calculated by the Deep Thought supercomputer in 7.5M years
         return {"answer": 42}
+
+###############################################################################
+
+    def _preprocessAction(self, action):
+        """Not implemented in this subclass"""
+        raise NotImplementedError()

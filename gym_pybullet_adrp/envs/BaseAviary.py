@@ -209,9 +209,12 @@ class BaseAviary(gym.Env):
         self.action_space = self._actionSpace()
         self.observation_space = self._observationSpace()
         #### Housekeeping ##########################################
-        self._housekeeping() # NOTE: this resets twice before the first episode...
+        # NOTE: this is kept from original BaseAviary but leads to resetting
+        # twice before the first episode and is therefore commented out...
+        # TODO: check whether this breaks any of the other environments
+        # self._housekeeping()
         #### Update and store the drones kinematic information #####
-        self._updateAndStoreKinematicInformation()
+        # self._updateAndStoreKinematicInformation()
         #### Start video recording #################################
         self._startVideoRecording()
     

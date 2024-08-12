@@ -107,6 +107,7 @@ class HardCodedController(BaseController):
 
         tck, _ = interpolate.splprep([waypoints[:, 0], waypoints[:, 1], waypoints[:, 2]], s=0.1)
         self.waypoints = waypoints
+
         duration = 12
         t = np.linspace(0, 1, int(duration * self.CTRL_FREQ))
         self.ref_x, self.ref_y, self.ref_z = interpolate.splev(t, tck)
@@ -158,11 +159,11 @@ class HardCodedController(BaseController):
         #     args = [0.3, 2]  # Height, duration
         #     self._take_off = True  # Only send takeoff command once
         # else:
-        step = iteration# - 2 * self.CTRL_FREQ  # Account for 2s delay due to takeoff
+        step = np.clip(iteration, 0, len(self.ref_x) - 1)# - 2 * self.CTRL_FREQ  # Account for 2s delay due to takeoff
         #     if ep_time - 2 > 0 and step < len(self.ref_x):
         target_pos = np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]])
         #print(f"Step: {step}, Target: {target_pos}")
-        print(f"Current position: {obs[0], obs[2], obs[4]}")
+        # print(f"Current position: {obs[0], obs[2], obs[4]}")
         target_vel = np.zeros(3)
         target_acc = np.ones(3) * 0.5
         target_yaw = 0.0

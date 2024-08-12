@@ -77,3 +77,10 @@ class State(Enum):
     CONTROL = 2
     LAND = 3
     END = 4
+
+###############################################################################
+
+class RaceMode(Enum):
+    """Race mode defines collision behaviour and observation space structure"""
+    COMPARE = 0
+    COMPETE = 1
