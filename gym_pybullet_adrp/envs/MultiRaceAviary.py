@@ -12,6 +12,8 @@ from gym_pybullet_adrp.envs.BaseAviary import BaseAviary
 from gym_pybullet_adrp.control import low_level_control
 from gym_pybullet_adrp.utils.constants import *
 from gym_pybullet_adrp.utils.enums import *
+from gymnasium import Env, Wrapper
+from typing import Any
 
 
 KIN_PHYSICS = [

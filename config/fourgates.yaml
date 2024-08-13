@@ -1,0 +1,90 @@
+# | Evaluation Scenario    | Rand. Start Position | Rand. Inertia | Rand. Gates & Obstacles | Rand. Episodes | Notes                 |
+# | :--------------------: | :------------------: | :-----------: | :---------------------: | :------------: | :-------------------: |
+# | `getting_started.yaml` | *No*                 | *No*          | *No*                    | *No*           | Perfect knowledge     |
+# | `level0.yaml`          | *Yes*                | *No*          | *No*                    | *No*           | First randomness      |
+# | `level1.yaml`          | *Yes*                | *Yes*         | *No*                    | *No*           | Adaptive              |
+# | `level2.yaml`          | *Yes*                | *Yes*         | *Yes*                   | *No*           | Learning, re-planning |
+# | `level3.yaml`          | *Yes*                | *Yes*         | *Yes*                   | *Yes*          | Robustness            |
+
+# Level 0
+
+# ENVIRONMENT
+# =============================================================================
+seed: 1337 # random seed
+reseed_on_reset: True # re-seed the random number generator between episodes
+camera_view: [5, -40, -40, 0.5, -1, 0.5] # distance, yaw, pitch, target x, y, z
+bounds: [       # DSL's flyable/usable space in Toronto extends from -3 to +3
+  [-3, -3, 0],  # meters in x and y and 0 and 2 meters in z, drones outside of
+  [3, 3, 2]     # these bounds are considered eliminated from the race
+]
+
+ctrl_freq: 25 # frequency of the controller's decision making
+pyb_freq: 500 # firmware requires multiple of 500
+episode_len_sec: 33  # maximum episode duration in seconds
+
+done_on_completion: True # terminate if all gates passed
+done_on_collision: True # terminate if collided with another object
+
+# DRONE INITIALIZATION (pre-randomization)
+# =============================================================================
+init_states: # one line per drone TODO: is there a nicer way?
+  pos: [ # position
+    [1., 1., 0.05],
+    #[1.1, 1.1, 0.05]
+  ]
+  vel: [ # linear velocity
+    [0, 0, 0],
+    #[0, 0, 0]
+  ]
+  rpy: [ # rotation
+    [0, 0, 0],
+    #[0, 0, 0]
+  ]
+  pqr: [ # angular velocity
+    [0, 0, 0],
+    #[0, 0, 0]
+  ]
+
+# GATE INITIALIZATION (pre-randomization)
+# =============================================================================
+gates: [ # x, y, z, r, p, y, type (0: `tall`, 1: `low`)
+      [1.0,0.4, 0.525, 0, 0,0, 1],
+      [1.0,-0.5, 1.0, 0, 0,0.0, 0],
+       [1.0,-1.6, 0.525, 0, 0,0.0, 1],
+       [-0.4,-1.5, 1.0, 0, 0,1.5, 0],
+
+]
+
+# OBSTACLE INITIALIZATION (pre-randomization)
+# =============================================================================
+obstacles: [ # x, y, z, r, p, y
+  [5.0, -0.5, 0.525, 0, 0, 0],
+  [5, -1.5, 0.525, 0, 0, 0],
+  [5, 0, 0.525, 0, 0, 0],
+  [5, 1.0, 0.525, 0, 0, 0]
+]
+
+# RANDOMIZATION
+# =============================================================================
+# randomize drone initial state
+random_drone_state: True
+random_drone_state_info:
+  pos:
+    distrib: "uniform"
+    x: [-0.1, 0.1]
+    y: [-0.1, 0.1]
+    z: [0.0, 0.02]
+  rot:
+    distrib: "uniform"
+    r: [-0.1, 0.1]
+    p: [-0.1, 0.1]
+    y: [-0.1, 0.1]
+
+# randomize drone inertial properties
+random_drone_inertia: False
+
+# randomize gate and obstacle positions
+random_gates_obstacles: False
+
+# disturbances in actions and environment (e.g. wind)
+disturbances: False

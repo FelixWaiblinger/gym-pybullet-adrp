@@ -13,6 +13,9 @@ import pybullet as pb
 from munch import Munch, munchify
 
 from gym_pybullet_adrp.utils.constants import FIRMWARE_PATH, URDF_DIR
+from typing import TypeVar
+
+T = TypeVar("T", float, np.ndarray)
 
 
 ################################################################################
@@ -121,7 +124,6 @@ def load_controller(path: str | Path, class_name: str=None):
     assert path.is_file(), f"Controller path is not a file: {path}"
     if not class_name:
         class_name = path.name.split(".")[0]
-        print(class_name)
     spec = importlib.util.spec_from_file_location("controller", path)
     controller_module = importlib.util.module_from_spec(spec)
     sys.modules["controller"] = controller_module

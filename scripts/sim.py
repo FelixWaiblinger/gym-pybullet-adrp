@@ -15,13 +15,13 @@ from user_controller import BaseController
 
 
 def simulate(
-    config: str="config/getting_started.yaml",
+    config: str="config/level2.yaml",
     controller: str | List[str]=[
         # "user_controller/HardCodedController.py",
         "user_controller/RLController.py",
     ],
     n_runs: int=10,
-    n_drones: int=2,
+    n_drones: int=1,
     gui: bool=True,
 ) -> list[float]:
     """Evaluate the drone controller over multiple episodes.
