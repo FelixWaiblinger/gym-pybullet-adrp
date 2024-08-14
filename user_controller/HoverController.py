@@ -1,4 +1,4 @@
-"""HoverController"""
+"""Hover Controller"""
 
 import numpy as np
 

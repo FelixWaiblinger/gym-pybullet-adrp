@@ -28,22 +28,16 @@ done_on_collision: True # terminate if collided with another object
 # DRONE INITIALIZATION (pre-randomization)
 # =============================================================================
 init_states: # one line per drone TODO: is there a nicer way?
-  pos: [ # position
-    [0.9, 0.9, 0.05],
-    [1.1, 1.1, 0.05]
-  ]
-  vel: [ # linear velocity
-    [0, 0, 0],
-    [0, 0, 0]
-  ]
-  rpy: [ # rotation
-    [0, 0, 0],
-    [0, 0, 0]
-  ]
-  pqr: [ # angular velocity
-    [0, 0, 0],
-    [0, 0, 0]
-  ]
+  drone0:
+    pos: [0.9, 0.9, 0.05] # position
+    vel: [0, 0, 0]        # linear velocity
+    rpy: [0, 0, 0]        # rotation
+    pqr: [0, 0, 0]        # angular velocity
+  drone1:
+    pos: [1.1, 1.1, 0.05]
+    vel: [0, 0, 0]
+    rpy: [0, 0, 0]
+    pqr: [0, 0, 0]
 
 # GATE INITIALIZATION (pre-randomization)
 # =============================================================================

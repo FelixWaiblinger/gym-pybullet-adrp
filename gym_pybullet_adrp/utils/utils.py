@@ -182,3 +182,16 @@ def draw_trajectory(
         lineColorRGB=[1, 0, 0],
         physicsClientId=initial_info["pyb_client"],
     )
+
+###############################################################################
+
+def map2pi(angle):
+    """Map an angle or array of angles to the interval of [-pi, pi].
+
+    Args:
+        angle: Number or array of numbers.
+
+    Returns:
+        The remapped angles.
+    """
+    return ((angle + np.pi) % (2 * np.pi)) - np.pi

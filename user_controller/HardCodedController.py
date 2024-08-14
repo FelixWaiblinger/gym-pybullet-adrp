@@ -1,4 +1,4 @@
-"""HardCodedController"""
+"""Hard-coded Controller"""
 
 from __future__ import annotations  # Python 3.10 type hints
 
@@ -45,6 +45,7 @@ class HardCodedController(BaseController):
         self.CTRL_TIMESTEP = CTRL_DT # NOTE: changed
         self.CTRL_FREQ = CTRL_FREQ # NOTE: changed
         self.initial_obs = initial_obs
+        self.delay = initial_info.get("delay", 0)
         self.VERBOSE = verbose
         self.BUFFER_SIZE = buffer_size
 
@@ -125,11 +126,11 @@ class HardCodedController(BaseController):
 
     def predict(
         self,
-        ep_time: float,
         obs: np.ndarray,
         reward: float | None = None,
         done: bool | None = None,
         info: dict | None = None,
+        ep_time: float=None,
     ) -> tuple[Command, list]:
         """Pick command sent to the quadrotor through a Crazyswarm/Crazyradio-like interface.
 
@@ -154,34 +155,36 @@ class HardCodedController(BaseController):
 
         # Handcrafted solution for getting_stated scenario.
 
-        # if not self._take_off:
-        #     command_type = Command.TAKEOFF
-        #     args = [0.3, 2]  # Height, duration
-        #     self._take_off = True  # Only send takeoff command once
-        # else:
-        step = np.clip(iteration, 0, len(self.ref_x) - 1)# - 2 * self.CTRL_FREQ  # Account for 2s delay due to takeoff
-        #     if ep_time - 2 > 0 and step < len(self.ref_x):
-        target_pos = np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]])
-        #print(f"Step: {step}, Target: {target_pos}")
-        # print(f"Current position: {obs[0], obs[2], obs[4]}")
-        target_vel = np.zeros(3)
-        target_acc = np.ones(3) * 0.5
-        target_yaw = 0.0
-        target_rpy_rates = np.zeros(3)
-        command_type = Command.FULLSTATE
-        args = [target_pos, target_vel, target_acc, target_yaw, target_rpy_rates, ep_time]
+        if not self._take_off:
+            command_type = Command.TAKEOFF
+            args = [0.3, 2]  # Height, duration
+            self._take_off = True  # Only send takeoff command once
+        else:
+            # Account for 2s delay due to takeoff
+            step = iteration - (2 + self.delay) * self.CTRL_FREQ
+            step = np.clip(step, 0, len(self.ref_x))
+            if step < len(self.ref_x):
+                command_type = Command.FULLSTATE
+                args = [
+                    np.array([self.ref_x[step], self.ref_y[step], self.ref_z[step]]), # target_pos
+                    np.zeros(3), # target_vel
+                    np.ones(3) * 0.5, # target_acc
+                    0.0, # target_yaw
+                    np.zeros(3), # target_rpy_rates
+                    ep_time
+                ]
             # Notify set point stop has to be called every time we transition from low-level
             # commands to high-level ones. Prepares for landing
-            # elif step >= len(self.ref_x) and not self._setpoint_land:
-            #     command_type = Command.NOTIFY
-            #     args = []
-            #     self._setpoint_land = True
-            # elif step >= len(self.ref_x) and not self._land:
-            #     command_type = Command.LAND
-            #     args = [0.0, 2.0]  # Height, duration
-            #     self._land = True  # Send landing command only once
-            # else:
-            #     command_type = Command.NONE
-            #     args = []
+            elif step >= len(self.ref_x) and not self._setpoint_land:
+                command_type = Command.NOTIFY
+                args = [ep_time]
+                self._setpoint_land = True
+            elif step >= len(self.ref_x) and not self._land:
+                command_type = Command.LAND
+                args = [0.0, 2.0]  # Height, duration
+                self._land = True  # Send landing command only once
+            else:
+                command_type = Command.NONE
+                args = []
 
         return command_type, args

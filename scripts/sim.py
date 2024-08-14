@@ -10,6 +10,7 @@ import pybullet as pb
 import gymnasium as gym
 
 from gym_pybullet_adrp.utils import load_config, load_controller, sync
+from gym_pybullet_adrp.utils.enums import RaceMode
 from user_controller import BaseController
 
 
@@ -17,7 +18,7 @@ def simulate(
     config: str="config/getting_started.yaml",
     controller: str | List[str]=[
         "user_controller/HardCodedController.py",
-        "user_controller/HardCodedController2.py",
+        # "user_controller/RLController.py",
     ],
     n_runs: int=10,
     n_drones: int=2,
@@ -38,7 +39,13 @@ def simulate(
     config = load_config(config)
 
     # create race environment
-    env = gym.make("multi-race-aviary-v0", race_config=config, num_drones=n_drones, gui=gui)
+    env = gym.make(
+        "multi-race-aviary-v0",
+        race_config=config,
+        num_drones=n_drones,
+        gui=gui,
+        racemode=RaceMode.COMPETE
+    )
     gui_timer = pb.addUserDebugText("", np.ones(3), physicsClientId=env.CLIENT)
 
     # initialize drone agents
@@ -61,6 +68,7 @@ def simulate(
         obs, info = env.reset()
         agents = []
         for drone_id, c in enumerate(controller):
+            info["delay"] = drone_id
             agents.append(load_controller(c)(drone_id, obs[drone_id], info))
 
         while not (terminated or truncated):
@@ -78,7 +86,7 @@ def simulate(
             )
 
             # select an action for each agent
-            actions = [a.predict(sim_time, obs[i]) for i, a in enumerate(agents)]
+            actions = [a.predict(obs[i], ep_time=sim_time) for i, a in enumerate(agents)]
 
             if all(isinstance(a, np.ndarray) for a in actions):
                 actions = np.array(actions)

@@ -27,7 +27,7 @@ def low_level_control(drone: int, conn):
             controller.reset(obs)
         elif command == "step":
             t, pos, rpy, vel, acc, ang = args
-            rpm = controller.computeControl(t, pos, rpy, vel, acc, ang)[0]
+            rpm = controller.computeControl(t, pos, rpy, vel, acc, ang)
             conn.send(rpm)
         elif command == "command":
             cmd, args = args
@@ -50,9 +50,10 @@ def low_level_control(drone: int, conn):
             elif cmd == Command.STOP:
                 controller.sendStopCmd(*args)
             elif cmd == Command.NOTIFY:
-                controller.notifySetpointStop(*args)
+                controller.notifySetpointStop()
             else:
                 continue
+
             controller.process_command_queue(args[-1])
             conn.send("ok") # NOTE: for synchronization
         else:
@@ -241,6 +242,7 @@ class MellingerControl(BaseControl):
 
         # =====================================
         # TODO: check whether we need all this?
+        # TODO: experiments indicate we do not need this ?????? wtf... 
         clipped_pwms = np.clip(np.array(pwms), MIN_PWM, MAX_PWM)
         thrust = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
         # thrust = thrust[[3, 2, 1, 0]] # assign values to correct motor
@@ -253,7 +255,7 @@ class MellingerControl(BaseControl):
 
         rpms = PWM2RPM_SCALE * pwms + PWM2RPM_CONST
 
-        return rpms, None, None
+        return rpms
 
 ###############################################################################
 
@@ -262,7 +264,7 @@ class MellingerControl(BaseControl):
     def _init_variables(self):
         # NOTE: taken from safe-control-gym.firmware_wrapper
         self.KF = 3.16e-10
-        self.KM = self._getURDFParameter('km')
+        self.KM = 7.94e-12 #self._getURDFParameter('km')
         self.prev_rpy = np.zeros(3)
         self.prev_vel = np.zeros(3)
         self.tick = 0

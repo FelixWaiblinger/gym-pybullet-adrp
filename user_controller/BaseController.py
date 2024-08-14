@@ -1,4 +1,4 @@
-"""Controller"""
+"""Base Controller"""
 
 from abc import ABC, abstractmethod
 from collections import deque

@@ -4,6 +4,7 @@ import multiprocessing as mp
 
 import numpy as np
 import pybullet as pb
+import xml.etree.ElementTree as etxml
 from munch import Munch
 from gymnasium import spaces
 
@@ -32,7 +33,6 @@ class MultiRaceAviary(BaseAviary):
         race_config: Munch,
         drone_model: DroneModel=DroneModel.CF2X,
         num_drones: int=2,
-        neighbourhood_radius: float=np.inf,
         physics: Physics=Physics.PYB,
         pyb_freq: int=FIRMWARE_FREQ,
         ctrl_freq: int=CTRL_FREQ,
@@ -84,12 +84,15 @@ class MultiRaceAviary(BaseAviary):
         self.env_bounds = np.array(self.config.bounds) # NOTE: see config
         self.done_on_completion = self.config.done_on_completion
 
+        drones = [d for d in self.config.init_states]
+        xyzs = [getattr(self.config.init_states, d).pos for d in drones]
+        rpys = [getattr(self.config.init_states, d).rpy for d in drones]
+
         super().__init__(
             drone_model=drone_model,
             num_drones=num_drones,
-            neighbourhood_radius=neighbourhood_radius,
-            initial_xyzs=np.array(race_config.init_states.pos)[:num_drones],
-            initial_rpys=np.array(race_config.init_states.rpy)[:num_drones] * DEG_TO_RAD,
+            initial_xyzs=np.array(xyzs[:num_drones]),
+            initial_rpys=np.array(rpys[:num_drones]) * DEG_TO_RAD,
             physics=physics,
             pyb_freq=pyb_freq,
             ctrl_freq=ctrl_freq,
@@ -138,6 +141,8 @@ class MultiRaceAviary(BaseAviary):
         """
         # self._build_racetrack()
         initial_obs, initial_info = super().reset(seed, options)
+        self._drone_init()
+
         self.current_gate = np.zeros(self.NUM_DRONES)
 
         # reset mellinger controllers
@@ -148,12 +153,13 @@ class MultiRaceAviary(BaseAviary):
         self.collision_objects = self.gates_urdf + self.obstacles_urdf + [self.PLANE_ID]
         # add drones to collision objects to detect elimination from race
         if self.racemode == RaceMode.COMPETE:
-            self.collision_objects += self.DRONE_IDS
+            self.collision_objects += self.DRONE_IDS.tolist()
         # disable drone collisions
         else:
             for i in self.DRONE_IDS:
                 for j in self.DRONE_IDS:
                     pb.setCollisionFilterPair(i, j, -1, -1, 0)
+
         self.drones_eliminated = np.zeros(self.NUM_DRONES, dtype=bool)
         self.drones_finished = np.zeros(self.NUM_DRONES, dtype=bool)
         self.step_counter = 0
@@ -193,8 +199,9 @@ class MultiRaceAviary(BaseAviary):
         for (_, connection), (cmd, args) in zip(self.ctrl, action):
             command = ("command", (cmd, args))
             connection.send(command)
-            if connection.recv() != "ok":
-                raise RuntimeError("BIG TIME ERROR")
+            # do not wait for ok if "no" command has been sent
+            if cmd != Command.NONE and connection.recv() != "ok":
+                raise RuntimeError("SYNCHRONIZATION ERROR")
 
         # Repeat for as many as the aggregate physics steps
         for _ in range(self.PYB_STEPS_PER_CTRL):
@@ -361,11 +368,11 @@ class MultiRaceAviary(BaseAviary):
             self.obstacles_actual = self.obstacles_nominal
 
         # spawn gates
-        for g in self.config.gates:
+        for pose, g in zip(self.gates_actual, self.config.gates):
             self.gates_urdf.append(pb.loadURDF(
                 URDF_DIR + ("low_portal.urdf" if g[-1] > 0 else "portal.urdf"),
-                g[:3],
-                pb.getQuaternionFromEuler(g[3:6]),
+                pose[:3],
+                pb.getQuaternionFromEuler(pose[3:6]),
                 physicsClientId=self.CLIENT
             ))
 
@@ -380,9 +387,72 @@ class MultiRaceAviary(BaseAviary):
 
 ###############################################################################
 
+    def _drone_init(self):
+        """TODO"""
+        URDF_TREE = etxml.parse(URDF_DIR + "cf2x.urdf").getroot()
+        drones = [d for d in self.config.init_states]
+        properties = {
+            "M": float(URDF_TREE[1][0][1].attrib['value']),
+            "Ixx": float(URDF_TREE[1][0][2].attrib['ixx']),
+            "Iyy": float(URDF_TREE[1][0][2].attrib['iyy']),
+            "Izz": float(URDF_TREE[1][0][2].attrib['izz']),
+        }
+
+        for i, drone in enumerate(self.DRONE_IDS):
+            if self.config.random_drone_inertia:
+                for key in properties:
+                    bla = getattr(self.config.random_drone_inertia_info, key)
+                    distrib = getattr(self.np_random, bla.distrib)
+                    offset = distrib(*bla.range)
+                    properties[key] = np.clip(properties[key] + offset, 0, 100)
+
+            pb.changeDynamics(
+                drone,
+                linkIndex=-1,  # Base link.
+                mass=properties["M"],
+                localInertiaDiagonal=[properties["Ixx"], properties["Iyy"], properties["Izz"]],
+                physicsClientId=self.CLIENT,
+            )
+
+            if self.config.random_drone_state:
+                position = self.config.random_drone_state_info.pos
+                rotation = self.config.random_drone_state_info.rot
+
+                pos_distrib = getattr(self.np_random, position.distrib)
+                rot_distrib = getattr(self.np_random, rotation.distrib)
+
+                pos_offset = np.array([
+                    pos_distrib(*position.x),
+                    pos_distrib(*position.y),
+                    pos_distrib(*position.z),
+                ])
+                rot_offset = np.array([
+                    rot_distrib(*rotation.r),
+                    rot_distrib(*rotation.p),
+                    rot_distrib(*rotation.y),
+                ])
+            else:
+                pos_offset, rot_offset = ZERO3, ZERO3
+
+            state = getattr(self.config.init_states, drones[i])
+
+            pb.resetBasePositionAndOrientation(
+                drone,
+                state.pos + pos_offset,
+                pb.getQuaternionFromEuler(state.rpy + rot_offset),
+                physicsClientId=self.CLIENT,
+            )
+            pb.resetBaseVelocity(
+                drone,
+                state.vel,
+                state.pqr,
+                physicsClientId=self.CLIENT
+            )
+
+###############################################################################
+
     def _gate_progress(self, drone_id: int):
         gate = int(self.current_gate[drone_id])
-        print(drone_id, gate)
 
         if (self.num_gates > 0 and gate < self.num_gates):
             x, y, _, _, _, rot = self.gates_actual[gate]
@@ -497,12 +567,17 @@ class MultiRaceAviary(BaseAviary):
             return np.array([self.rgb[i] for i in range(self.NUM_DRONES)]).astype('float32')
 
         if self.observation_type == ObservationType.KIN:
-            # observation space of size (NUM_DRONES, 49)
-            obs_49 = np.zeros((self.NUM_DRONES, 49))
+            obs_size = 49
+            # position and rotation of all other drones
+            if self.racemode == RaceMode.COMPETE:
+                obs_size += 6 * (self.NUM_DRONES - 1)
+
+            # observation space of size (NUM_DRONES, 49(+6*(NUM_DRONES-1)))
+            all_obs = np.zeros((self.NUM_DRONES, obs_size))
 
             # NOTE: for compatibility with BaseAviary
             if not self.gates_urdf:
-                return obs_49
+                return all_obs
 
             num_gates = len(self.gates_urdf)
             num_obstacles = len(self.obstacles_urdf)
@@ -547,14 +622,22 @@ class MultiRaceAviary(BaseAviary):
                         obstacles_range[j] = False
 
                 # combine drone, gate, obstacle and progress observation
-                obs_49[i, :12] = drone.reshape((12,))
-                obs_49[i, 12:28] = gate_poses.flatten()
-                obs_49[i, 28:32] = gate_range
-                obs_49[i, 32:44] = obstacles_poses.flatten()
-                obs_49[i, 44:48] = obstacles_range
-                obs_49[i, -1] = self.current_gate[i]
+                all_obs[i, :12] = drone.reshape((12,))
+                all_obs[i, 12:28] = gate_poses.flatten()
+                all_obs[i, 28:32] = gate_range
+                all_obs[i, 32:44] = obstacles_poses.flatten()
+                all_obs[i, 44:48] = obstacles_range
+                all_obs[i, 48] = self.current_gate[i]
 
-            return obs_49.astype(np.float64)
+                # add other drone poses to observation
+                if self.racemode == RaceMode.COMPETE:
+                    others = [k for k in range(self.NUM_DRONES) if k != i]
+                    for idx, j in enumerate(others):
+                        obs = self._getDroneStateVector(j)
+                        idx = 49 + 6 * idx
+                        all_obs[i, idx:idx+6] = np.hstack([obs[:3], obs[7:10]])
+
+            return all_obs.astype(np.float64)
 
 ###############################################################################
 
