@@ -143,8 +143,6 @@ class MultiRaceAviary(BaseAviary):
         initial_obs, initial_info = super().reset(seed, options)
         self._drone_init()
 
-        self.current_gate = np.zeros(self.NUM_DRONES)
-
         # reset mellinger controllers
         for _, connection in self.ctrl:
             command = ("reset", (initial_obs, initial_info))
@@ -160,6 +158,7 @@ class MultiRaceAviary(BaseAviary):
                 for j in self.DRONE_IDS:
                     pb.setCollisionFilterPair(i, j, -1, -1, 0)
 
+        self.current_gate = np.zeros(self.NUM_DRONES)
         self.drones_eliminated = np.zeros(self.NUM_DRONES, dtype=bool)
         self.drones_finished = np.zeros(self.NUM_DRONES, dtype=bool)
         self.step_counter = 0
@@ -210,6 +209,7 @@ class MultiRaceAviary(BaseAviary):
                 self._updateAndStoreKinematicInformation()
 
             # Step the simulation using the desired physics update
+            # TODO: add disturbances
             self._apply_physics(self.rpms, self.prev_rpms)
 
             # Update and store the drones kinematic information
@@ -290,40 +290,36 @@ class MultiRaceAviary(BaseAviary):
             )
 
         if self.observation_type == ObservationType.KIN:
-            pis = np.pi * np.ones(3)
-            # Drone observations: X, Y, Z, R, P, Y, VX, VY, VZ, WX, WY, WZ
-            dro_upper = np.hstack([self.env_bounds[1], pis, 10*np.ones(6)])
-            dro_lower = -1 * dro_upper
-            dro_lower[2] = 0 # lower position bound is the ground at 0
-
-            dro_lower = np.vstack([dro_lower for _ in range(self.NUM_DRONES)])
-            dro_upper = np.vstack([dro_upper for _ in range(self.NUM_DRONES)])
-
-            # TODO: provide more precise gate/obstacle limits
-
-            # Add obstacles to observation space
+            # lower observation bounds
             obs_lower = np.concatenate([
-                -10 * np.ones((4, 4)).flatten(), # gate poses
-                0   * np.ones(4), # gates in range
-                -10 * np.ones((4, 3)).flatten(), # obstacle poses
-                0   * np.ones(4), # obstacles in range
-                0   * np.ones(1) # current gate id
+                [-5] * 3,                   # agent_pos_low
+                [-np.pi] * 3,               # agent_rot_low
+                [-10] * 3,                  # agent_vel_low
+                [-10] * 3,                  # agent_ang_low
+                [-5, -5, -5, -np.pi] * 4,   # gate_pose_low
+                [-1] * 4,                   # gate_range_low
+                [-5] * 3 * 4,               # obst_pose_low
+                [-1] * 4,                   # obst_range_low
+                [-1],                       # gate_id_low
             ])
+
+            # upper observation bounds
             obs_upper = np.concatenate([
-                10 * np.ones((4, 4)).flatten(), # gate poses
-                1  * np.ones(4), # gates in range
-                10 * np.ones((4, 3)).flatten(), # obstacle poses
-                1  * np.ones(4), # obstacles in range
-                4  * np.ones(1) # current gate id
+                [5] * 3,                    # agent_pos_high
+                [np.pi] * 3,                # agent_rot_high
+                [10] * 3,                   # agent_vel_high
+                [10] * 3,                   # agent_ang_high
+                [5, 5, 5, np.pi] * 4,       # gate_pose_high
+                [1] * 4,                    # gate_range_high
+                [5] * 3 * 4,                # obst_pose_high
+                [1] * 4,                    # obst_range_high
+                [4],                        # gate_id_high
             ])
+
             obs_lower = np.vstack([obs_lower for _ in range(self.NUM_DRONES)])
             obs_upper = np.vstack([obs_upper for _ in range(self.NUM_DRONES)])
 
-            return spaces.Box(
-                low=np.hstack([dro_lower, obs_lower]),
-                high=np.hstack([dro_upper, obs_upper]),
-                dtype=np.float64
-            )
+            return spaces.Box(low=obs_lower, high=obs_upper, dtype=np.float64)
 
 ###############################################################################
 

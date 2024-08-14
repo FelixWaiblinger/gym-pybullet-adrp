@@ -32,21 +32,7 @@ class RLController(BaseController):
         self.agent = PPO.load(AGENT_PATH)
         self.action_scale = np.array([1, 1, 1, np.pi])
         self.drone_pose = initial_obs[[0, 1, 2, 5]]
-        self.pose_delayed = False
-
-        self.lower = [
-            -5., -5., -5., -3.1415927, -3.1415927, -3.1415927, -10., -10.,
-            -10., -10., -10., -10., -5., -5., -5., -3.1415927, -5.,  -5., -5.,
-            -3.1415927, -5.,  -5., -5., -3.1415927, -5., -5., -5., -3.1415927,
-            -1., -1., -1., -1., -5., -5., -5., -5., -5., -5., -5., -5., -5.,
-            -5., -5., -5., -1., -1., -1., -1., -1.
-        ]
-        self.upper = [
-            5., 5., 5., 3.1415927, 3.1415927, 3.1415927, 10., 10., 10.,
-            10., 10., 10., 5., 5., 5., 3.1415927, 5., 5., 5., 3.1415927, 5.,
-            5., 5., 3.1415927, 5., 5., 5., 3.1415927, 1., 1., 1., 1., 5., 5.,
-            5., 5., 5., 5., 5., 5., 5., 5., 5., 5., 1., 1., 1., 1., 4.
-        ]
+        self.time = 0
 
 ###############################################################################
 
@@ -60,26 +46,25 @@ class RLController(BaseController):
         """Predict the next action."""
         obs = self._observation_transform(obs)
 
-        action, _ = self.agent.predict(obs, deterministic=True)
-        action = self._action_transform(action, ep_time)
+        # store additional infos
+        self.drone_pose = obs[[0, 1, 2, 5]]
+        self.time = ep_time
 
-        if self.pose_delayed:
-            self.drone_pose = obs[[0, 1, 2, 5]]
-        else:
-            self.pose_delayed = True
+        action, _ = self.agent.predict(obs, deterministic=True)
+        action = self._action_transform(action)
 
         return action
 
 ###############################################################################
 
-    def _action_transform(self, action, time):
+    def _action_transform(self, action):
         """TODO"""
         action[3] = 0
         action = self.drone_pose + (action * self.action_scale)
         action[3] = map2pi(action[3])  # Ensure yaw is in [-pi, pi]
 
         cmd = Command.FULLSTATE
-        args = [action[:3], ZERO3, ZERO3, action[3], ZERO3, time]
+        args = [action[:3], ZERO3, ZERO3, action[3], ZERO3, self.time]
 
         action = (cmd, args)
 
@@ -89,7 +74,4 @@ class RLController(BaseController):
 
     def _observation_transform(self, observation):
         """TODO"""
-        observation = np.clip(observation, self.lower, self.upper)
-        observation = observation.astype(np.float32)
-
         return observation
