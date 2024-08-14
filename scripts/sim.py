@@ -66,6 +66,7 @@ def simulate(
         sim_time, episode_step = 0, 0
         terminated, truncated = False, False
         obs, info = env.reset()
+        print(len(obs))
         agents = []
         for drone_id, c in enumerate(controller):
             info["delay"] = drone_id
