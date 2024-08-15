@@ -1,10 +1,10 @@
-# | Evaluation Scenario    | Rand. Start Position | Rand. Inertia | Rand. Gates & Obstacles | Rand. Episodes | Notes                 |
-# | :--------------------: | :------------------: | :-----------: | :---------------------: | :------------: | :-------------------: |
-# | `getting_started.yaml` | *No*                 | *No*          | *No*                    | *No*           | Perfect knowledge     |
-# | `level0.yaml`          | *Yes*                | *No*          | *No*                    | *No*           | First randomness      |
-# | `level1.yaml`          | *Yes*                | *Yes*         | *No*                    | *No*           | Adaptive              |
-# | `level2.yaml`          | *Yes*                | *Yes*         | *Yes*                   | *No*           | Learning, re-planning |
-# | `level3.yaml`          | *Yes*                | *Yes*         | *Yes*                   | *Yes*          | Robustness            |
+# | Evaluation Scenario    | Rand. Start Position | Rand. Dynmacis | Rand. Gates & Obstacles | Rand. Episodes | Notes                 |
+# | :--------------------: | :------------------: | :------------: | :---------------------: | :------------: | :-------------------: |
+# | `getting_started.yaml` | *No*                 | *No*           | *No*                    | *No*           | Perfect knowledge     |
+# | `level0.yaml`          | *Yes*                | *No*           | *No*                    | *No*           | First randomness      |
+# | `level1.yaml`          | *Yes*                | *Yes*          | *No*                    | *No*           | Adaptive              |
+# | `level2.yaml`          | *Yes*                | *Yes*          | *Yes*                   | *No*           | Learning, re-planning |
+# | `level3.yaml`          | *Yes*                | *Yes*          | *Yes*                   | *Yes*          | Robustness            |
 
 # Level 0
 

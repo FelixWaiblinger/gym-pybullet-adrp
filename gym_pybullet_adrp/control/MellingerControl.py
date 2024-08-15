@@ -26,8 +26,8 @@ def low_level_control(drone: int, conn):
             obs, _ = args
             controller.reset(obs)
         elif command == "step":
-            t, pos, rpy, vel, acc, ang = args
-            rpm = controller.computeControl(t, pos, rpy, vel, acc, ang)
+            t, pos, rpy, vel, ang, disturbance = args
+            rpm = controller.computeControl(t, pos, rpy, vel, ang, disturbance)
             conn.send(rpm)
         elif command == "command":
             cmd, args = args
@@ -48,14 +48,14 @@ def low_level_control(drone: int, conn):
             elif cmd == Command.GOTO:
                 controller.sendGotoCmd(*args)
             elif cmd == Command.STOP:
-                controller.sendStopCmd(*args)
+                controller.sendStopCmd()
             elif cmd == Command.NOTIFY:
                 controller.notifySetpointStop()
             else:
                 continue
 
             controller.process_command_queue(args[-1])
-            conn.send("ok") # NOTE: for synchronization
+            # conn.send("ok") # NOTE: for synchronization
         else:
             conn.close()
             return
@@ -199,6 +199,9 @@ class MellingerControl(BaseControl):
             The current yaw error.
 
         """
+        # NOTE: hacky way to receive disturbances from MultiRaceAviary
+        disturbance = target_pos
+
         # Get state values from pybullet
         body_rot = R.from_euler("XYZ", cur_rpy).inv()
 
@@ -240,18 +243,16 @@ class MellingerControl(BaseControl):
         # Step controller
         pwms = self._step_controller()
 
-        # =====================================
-        # TODO: check whether we need all this?
-        # TODO: experiments indicate we do not need this ?????? wtf... 
         clipped_pwms = np.clip(np.array(pwms), MIN_PWM, MAX_PWM)
         thrust = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
-        # thrust = thrust[[3, 2, 1, 0]] # assign values to correct motor
+
+        # action noise (can be zero, determined by MultiRaceAviary)
+        thrust += disturbance
 
         # convert to quad motor rpm commands
         pwms = self._thr2pwm(
             thrust, PWM2RPM_SCALE, PWM2RPM_CONST, self.KF, MIN_PWM, MAX_PWM
         )
-        # =====================================
 
         rpms = PWM2RPM_SCALE * pwms + PWM2RPM_CONST
 
@@ -264,7 +265,7 @@ class MellingerControl(BaseControl):
     def _init_variables(self):
         # NOTE: taken from safe-control-gym.firmware_wrapper
         self.KF = 3.16e-10
-        self.KM = 7.94e-12 #self._getURDFParameter('km')
+        self.KM = self._getURDFParameter('km')
         self.prev_rpy = np.zeros(3)
         self.prev_vel = np.zeros(3)
         self.tick = 0

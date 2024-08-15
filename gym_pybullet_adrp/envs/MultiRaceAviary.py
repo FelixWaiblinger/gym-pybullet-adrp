@@ -194,30 +194,46 @@ class MultiRaceAviary(BaseAviary):
             ) for act in action]
 
         # send high-level commands to each drone (e.g. FULLSTATE + args)
-        for (_, connection), (cmd, args) in zip(self.ctrl, action):
-            command = ("command", (cmd, args))
-            connection.send(command)
-            # do not wait for ok if "no" command has been sent
-            if cmd != Command.NONE and connection.recv() != "ok":
-                raise RuntimeError("SYNCHRONIZATION ERROR")
+        for i, (controller, (cmd, args)) in enumerate(zip(self.ctrl, action)):
+            if self.drones_eliminated[i]:
+                cmd, args = Command.STOP, [self.step_counter]
 
-        # Repeat for as many as the aggregate physics steps
+            command = ("command", (cmd, args))
+            controller[1].send(command)
+
+            # do not wait for ok if "no" command has been sent
+            # if  cmd not in [Command.NONE, Command.STOP] and \
+            # if controller[1].recv() != "ok":
+            #     raise RuntimeError("SYNCHRONIZATION ERROR")
+
+        # repeat for as many as the aggregate physics steps
         for _ in range(self.PYB_STEPS_PER_CTRL):
-            # Update and store the drones kinematic info for certain
             if (self.PYB_STEPS_PER_CTRL > 1 and self.PHYSICS in KIN_PHYSICS):
                 self._updateAndStoreKinematicInformation()
 
-            # Step the simulation using the desired physics update
-            # TODO: add disturbances
+            # step the simulation using the desired physics update
             self._apply_physics(self.rpms, self.prev_rpms)
 
-            # Update and store the drones kinematic information
+            # update and store the drones kinematic information
             self._updateAndStoreKinematicInformation()
 
             obs = self._computeObs()
 
+            # compute action noise per drone
+            if self.config.disturbances:
+                noise = self.config.disturbances_info.action
+                distrib = getattr(self.np_random, noise.distrib)
+                disturbance = distrib(0, noise.std, size=(self.NUM_DRONES, 4))
+            else:
+                disturbance = np.zeros((self.NUM_DRONES, 4))
+
             # update the state of mellinger controller
             for i, (_, connection) in enumerate(self.ctrl):
+                # force turn-off motors when crashed
+                if self.drones_eliminated[i]:
+                    self.prev_rpms[i] = self.rpms[i] = np.zeros(4)
+                    continue
+
                 command = (
                     "step",
                     (
@@ -225,8 +241,8 @@ class MultiRaceAviary(BaseAviary):
                         obs[i, :3], # pos
                         obs[i, 3:6], # rpy
                         obs[i, 6:9], # vel
-                        ZERO3,
-                        ZERO3
+                        obs[i, 9:12], # ang vel
+                        disturbance[i]
                     )
                 )
                 connection.send(command)
@@ -237,19 +253,18 @@ class MultiRaceAviary(BaseAviary):
                 # get motor rpms from mellinger controllers
                 self.rpms[i] = connection.recv()
 
-
-        # Track gate progress
+        # track gate progress
         for i in range(self.NUM_DRONES):
             self._gate_progress(i)
 
-        # Prepare the return values
+        # prepare the return values
         obs = self._computeObs()
         reward = self._computeReward()
         terminated = self._computeTerminated()
         truncated = self._computeTruncated()
         info = self._computeInfo()
 
-        # Advance the step counter
+        # advance the step counter
         self.step_counter += self.PYB_STEPS_PER_CTRL
 
         return obs, reward, terminated, truncated, info
@@ -492,7 +507,7 @@ class MultiRaceAviary(BaseAviary):
 
 ###############################################################################
 
-    def _apply_physics(self, action, prev_action, disturbance=None):
+    def _apply_physics(self, action, prev_action):
         """Apply pybullet physics to the drones for one step."""
         for i in range(self.NUM_DRONES):
             if self.PHYSICS == Physics.PYB:
@@ -514,8 +529,12 @@ class MultiRaceAviary(BaseAviary):
                 self._drag(prev_action[i, :], i)
                 self._downwash(i)
 
-            if disturbance is not None:
+            if self.config.disturbances:
+                dynamics = self.config.disturbances_info.dynamics
+                distrib = getattr(self.np_random, dynamics.distrib)
+                disturbance = distrib(dynamics.low, dynamics.high)
                 pos = self._getDroneStateVector(i)[:3]
+
                 pb.applyExternalForce(
                     self.DRONE_IDS[i],
                     linkIndex=4,  # Link attached to the quadrotor's center of mass.
@@ -663,20 +682,22 @@ class MultiRaceAviary(BaseAviary):
             state = self._getDroneStateVector(i)
 
             out_of_bounds = np.any(np.abs(state[:3]) > self.env_bounds[1])
-            # unstable = np.any(np.abs(state[13:16]) > 20) # TODO replace arbitrary theshold
-            unstable = False
+            unstable = np.any(np.abs(state[13:16]) > 20) # TODO replace arbitrary theshold
+            # unstable = False
             crashed = self._collision(i) is not None
 
             # TODO debugging
-            # print(f"{out_of_bounds = }, {unstable = }, {crashed = }")
+            print(f"{out_of_bounds = }, {unstable = }, {crashed = }")
 
-            self.drones_eliminated[i] = out_of_bounds or unstable or crashed
+            self.drones_eliminated[i] = \
+                self.drones_eliminated[i] or \
+                out_of_bounds or \
+                unstable or \
+                crashed
 
         all_crashed = np.all(self.drones_eliminated)
         all_finished = np.all(self.drones_finished)
         crsh_or_fin = np.logical_or(self.drones_eliminated, self.drones_finished)
-
-        # print(f"{all_crashed = }, {all_finished = }, {crsh_or_fin = }")
 
         return all_crashed or all_finished or np.all(crsh_or_fin)
 

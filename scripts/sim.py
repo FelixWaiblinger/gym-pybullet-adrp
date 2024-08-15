@@ -17,8 +17,8 @@ from user_controller import BaseController
 def simulate(
     config: str="config/getting_started.yaml",
     controller: str | List[str]=[
-        # "user_controller/HardCodedController.py",
-        "user_controller/RLController.py",
+        "user_controller/HardCodedController.py",
+        # "user_controller/RLController.py",
     ],
     n_runs: int=10,
     n_drones: int=2,
@@ -46,7 +46,6 @@ def simulate(
         gui=gui,
         # racemode=RaceMode.COMPETE
     )
-    print(env.observation_space)
     gui_timer = pb.addUserDebugText("", np.ones(3), physicsClientId=env.CLIENT)
 
     # initialize drone agents
