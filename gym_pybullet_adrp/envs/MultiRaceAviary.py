@@ -316,6 +316,13 @@ class MultiRaceAviary(BaseAviary):
                 [4],                        # gate_id_high
             ])
 
+            if self.racemode == RaceMode.COMPETE:
+                # position and rotation of other drones
+                others_low = ([-5] * 3 + [-np.pi] * 3) * (self.NUM_DRONES - 1)
+                others_high = ([5] * 3 + [np.pi] * 3) * (self.NUM_DRONES - 1)
+                obs_lower = np.concatenate([obs_lower, others_low])
+                obs_upper = np.concatenate([obs_upper, others_high])
+
             obs_lower = np.vstack([obs_lower for _ in range(self.NUM_DRONES)])
             obs_upper = np.vstack([obs_upper for _ in range(self.NUM_DRONES)])
 

@@ -21,7 +21,7 @@ def simulate(
         "user_controller/RLController.py",
     ],
     n_runs: int=10,
-    n_drones: int=1,
+    n_drones: int=2,
     gui: bool=True,
 ) -> list[float]:
     """Evaluate the drone controller over multiple episodes.
@@ -46,6 +46,7 @@ def simulate(
         gui=gui,
         # racemode=RaceMode.COMPETE
     )
+    print(env.observation_space)
     gui_timer = pb.addUserDebugText("", np.ones(3), physicsClientId=env.CLIENT)
 
     # initialize drone agents
