@@ -139,7 +139,7 @@ class MultiRaceAviary(BaseAviary):
         ndarray: Initial observations according to `_computeObs()`
         dict: Initial additional information according to `_computeInfo()`
         """
-        # self._build_racetrack()
+        self.current_gate = np.zeros(self.NUM_DRONES)
         initial_obs, initial_info = super().reset(seed, options)
         self._drone_init()
 
@@ -158,7 +158,6 @@ class MultiRaceAviary(BaseAviary):
                 for j in self.DRONE_IDS:
                     pb.setCollisionFilterPair(i, j, -1, -1, 0)
 
-        self.current_gate = np.zeros(self.NUM_DRONES)
         self.drones_eliminated = np.zeros(self.NUM_DRONES, dtype=bool)
         self.drones_finished = np.zeros(self.NUM_DRONES, dtype=bool)
         self.step_counter = 0
