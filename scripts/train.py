@@ -30,7 +30,7 @@ LOG_NAME = "plot"
 SAVE_PATH = "./fourgates"
 CONFI_PATH = "./config/fourgates.yaml"
 TRAIN_STEPS = 50_000
-N_ENVS = 1
+N_ENVS = 4
 n_drones = 1
 
 
@@ -38,13 +38,19 @@ n_drones = 1
 
 def create_race_env(config_path: Path, gui: bool = False) :
 
+    def env_factory():
+        #    """Create the drone racing environment."""
+        config = load_config(config_path)
 
-    #    """Create the drone racing environment."""
-    config = load_config(config_path)
-
-    # Load configuration and check if firmare should be used.
-    env  = gym.make("multi-race-aviary-v0", race_config=config, num_drones=n_drones, gui=gui)
-    env = RewardWrapper(env)
+        # Load configuration and check if firmare should be used.
+        env  = gym.make("multi-race-aviary-v0", race_config=config, num_drones=n_drones, gui=gui)
+        wrapper_env = RewardWrapper(env)
+        return wrapper_env
+    env = make_vec_env(
+        lambda: env_factory(),
+        n_envs = N_ENVS,
+        vec_env_cls=DummyVecEnv
+        )
     return env
 
 

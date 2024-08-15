@@ -58,6 +58,8 @@ class RewardWrapper(Wrapper):
             The next observation, the reward, the terminated and truncated flags, and the info dict.
         """
         # yaw = 0 for all our experiments
+        #print(type(action))
+    
         obs, reward, terminated, truncated, info = self.env.step(action)
         reward = self._compute_reward(obs, reward, terminated, truncated, info)
         return obs, reward, terminated, truncated, info
@@ -91,15 +93,15 @@ class RewardWrapper(Wrapper):
             3: obs[0][24:28],
         }
         if gate_id > (self.current_gate_id) % 4:
-            print("gate_id in if-statement: ",gate_id)
+            #print("gate_id in if-statement: ",gate_id)
             self.current_gate_id = gate_id
             self.current_target = gate_positions[gate_id]
             r_passed = 5
-        print("current:", self.current_gate_id)
-        print("current_target:", self.current_target)
+        #print("current:", self.current_gate_id)
+        #print("current_target:", self.current_target)
         r_collision = -1 if terminated and not info["task_completed"] else 0
         r_lab = 10 if terminated and info["task_completed"] else 0
-        print(f"r_passed: {r_passed}, r_collision: {r_collision}, r_lab: {r_lab}","gate_id: ",gate_id)
+        #print(f"r_passed: {r_passed}, r_collision: {r_collision}, r_lab: {r_lab}","gate_id: ",gate_id)
         # compute gate progress for movement in x and y direction using l2 norm
         distance_previous_xy = np.linalg.norm(self.current_target[0:2] - self.previous_pos[:2], ord=2)
         distance_current_xy = np.linalg.norm(self.current_target[0:2] - obs[0][:2], ord=2)

@@ -106,7 +106,7 @@ class Rlcontroller(BaseController):
         action = self._action_transform(action).astype(float)
         command_type = Command.FULLSTATE
         action_trans = np.array([1,1,1]).astype(float)
-        args = [action_trans, zero, zero, action[3], zero, ep_time]
+        args = [action[:3], zero, zero, action[3], zero, ep_time]
         #print("RL controller")
         #print(command_type, args)
         return command_type, args
