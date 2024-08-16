@@ -41,4 +41,4 @@ ACCEL_LPF_CUTOFF_FREQ = 30
 SUPPLY_VOLTAGE = 3
 MOTOR_SET_ENABLE = True
 QUAD_FORMATION_X = True
-SPEED_LIMIT = 10 # TODO: replace arbitrary speed limit
+SPEED_LIMIT = 10 # arbitrary speed limit

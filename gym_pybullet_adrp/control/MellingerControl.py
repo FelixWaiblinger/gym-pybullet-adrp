@@ -246,6 +246,9 @@ class MellingerControl(BaseControl):
         clipped_pwms = np.clip(np.array(pwms), MIN_PWM, MAX_PWM)
         thrust = self.KF * (PWM2RPM_SCALE * clipped_pwms + PWM2RPM_CONST) ** 2
 
+        # NOTE: compensate for cf2x_IROS.urdf switching order of propellers
+        thrust = thrust[[3,2,1,0]]
+
         # action noise (can be zero, determined by MultiRaceAviary)
         thrust += disturbance
 

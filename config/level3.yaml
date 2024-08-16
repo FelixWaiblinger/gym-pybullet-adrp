@@ -27,8 +27,7 @@ done_on_collision: True # terminate if collided with another object
 
 # DRONE INITIALIZATION (pre-randomization)
 # =============================================================================
-# create a new entry per drone
-init_states:
+init_states: # create a new entry per drone
   drone0:
     pos: [0.9, 0.9, 0.05] # position
     vel: [0, 0, 0]        # linear velocity

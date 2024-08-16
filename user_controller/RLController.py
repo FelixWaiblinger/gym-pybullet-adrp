@@ -9,7 +9,7 @@ from gym_pybullet_adrp.utils.utils import map2pi
 from user_controller import BaseController
 
 
-AGENT_PATH = "baseline_level3"
+AGENT_PATH = "user_controller/example_RL_model"
 
 
 class RLController(BaseController):
@@ -58,7 +58,9 @@ class RLController(BaseController):
 ###############################################################################
 
     def _action_transform(self, action):
-        """TODO"""
+        """Transform the action predicted by the agent before propagating to
+        the environment.
+        """
         action[3] = 0
         action = self.drone_pose + (action * self.action_scale)
         action[3] = map2pi(action[3])  # Ensure yaw is in [-pi, pi]
@@ -73,5 +75,7 @@ class RLController(BaseController):
 ###############################################################################
 
     def _observation_transform(self, observation):
-        """TODO"""
+        """Transform the observations returned by the environment before
+        propagating them to the agent.
+        """
         return observation

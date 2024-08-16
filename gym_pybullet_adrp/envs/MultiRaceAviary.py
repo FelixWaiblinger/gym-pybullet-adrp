@@ -1,10 +1,10 @@
 """Drone Racing for multiple drones on one race track"""
 
 import multiprocessing as mp
+import xml.etree.ElementTree as etxml
 
 import numpy as np
 import pybullet as pb
-import xml.etree.ElementTree as etxml
 from munch import Munch
 from gymnasium import spaces
 
@@ -405,7 +405,7 @@ class MultiRaceAviary(BaseAviary):
 ###############################################################################
 
     def _drone_init(self):
-        """TODO"""
+        """Initialize drone properties and state with optional randomness."""
         URDF_TREE = etxml.parse(URDF_DIR + "cf2x.urdf").getroot()
         drones = [d for d in self.config.init_states]
         properties = {
@@ -682,12 +682,8 @@ class MultiRaceAviary(BaseAviary):
             state = self._getDroneStateVector(i)
 
             out_of_bounds = np.any(np.abs(state[:3]) > self.env_bounds[1])
-            unstable = np.any(np.abs(state[13:16]) > 20) # TODO replace arbitrary theshold
-            # unstable = False
+            unstable = np.any(np.abs(state[13:16]) > 20) # arbitrary theshold
             crashed = self._collision(i) is not None
-
-            # TODO debugging
-            print(f"{out_of_bounds = }, {unstable = }, {crashed = }")
 
             self.drones_eliminated[i] = \
                 self.drones_eliminated[i] or \
