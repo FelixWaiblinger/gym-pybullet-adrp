@@ -12,6 +12,48 @@ import yaml
 import time
 logger = logging.getLogger(__name__)
 
+class DroneObservationWrapper(Wrapper):
+    """Wrapper to alter the default observation space from the environment for RL training."""
+
+    def __init__(self, env: Env):
+        """Initialize the wrapper.
+
+        Args:
+            env: The firmware wrapper.
+        """
+        super().__init__(env)
+
+    def reset(self, *args: Any, **kwargs: dict[str, Any]) -> np.ndarray:
+        """Reset the environment.
+
+        Args:
+            args: Positional arguments to pass to the firmware wrapper.
+            kwargs: Keyword arguments to pass to the firmware wrapper.
+
+        Returns:
+            The initial observation of the next episode.
+        """
+        obs, info = self.env.reset(*args, **kwargs)
+        return obs, info
+    
+    def step(self, action: np.ndarray) -> tuple[np.ndarray, float, bool, bool, dict]:
+        """Take a step in the environment.
+
+        Args:
+            action: The action to take in the environment. See action space for details.
+
+        Returns:
+            The next observation, the reward, the terminated and truncated flags, and the info dict.
+        """
+        #change the observation space to only include 2 gates instead of 4
+        action[0,3] = 0 
+        obs, reward, terminated, truncated, info = self.env.step(action)
+        if self.env.current_gate[0] >= 2:
+            terminated = True
+        return obs, reward, terminated, truncated, info
+    
+
+                             
 
 
 class RewardWrapper(Wrapper):
@@ -57,10 +99,6 @@ class RewardWrapper(Wrapper):
         Returns:
             The next observation, the reward, the terminated and truncated flags, and the info dict.
         """
-        # yaw = 0 for all our experiments
-        #print(type(action))
-        #set the last element in the numpy array of aciton to 0
-        action[0,3] = 0
         obs, reward, terminated, truncated, info = self.env.step(action)
         reward = self._compute_reward(obs, reward, terminated, truncated, info)
         return obs, reward, terminated, truncated, info
@@ -84,14 +122,12 @@ class RewardWrapper(Wrapper):
         r_passed = 0
         r_collision = 0
         r_lab = 0   
-        gate_id = int(obs[0][-1])
+        gate_id = int(obs[0][-1])   
         # Assuming gate poses start at index 12 and each gate's pose is represented by 4 consecutive values
         # For example, gate 0 is at obs[0][12:16], gate 1 at obs[0][16:20], etc.
         gate_positions = {
-            0: obs[0][12:16],
-            1: obs[0][16:20],
-            2: obs[0][20:24],
-            3: obs[0][24:28],
+            0: obs[12:16],
+            1: obs[16:20],
         }
         if gate_id > (self.current_gate_id) % 4:
             #print("gate_id in if-statement: ",gate_id)
@@ -102,6 +138,7 @@ class RewardWrapper(Wrapper):
         #print("current_target:", self.current_target)
         r_collision = -1 if terminated and not info["task_completed"] else 0
         r_lab = 10 if terminated and info["task_completed"] else 0
+        print("r_passed: ",r_passed, "r_collision: ",r_collision, "r_lab: ",r_lab)
         #print(f"r_passed: {r_passed}, r_collision: {r_collision}, r_lab: {r_lab}","gate_id: ",gate_id)
         # compute gate progress for movement in x and y direction using l2 norm
         distance_previous_xy = np.linalg.norm(self.current_target[0:2] - self.previous_pos[:2], ord=2)
