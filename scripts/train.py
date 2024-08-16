@@ -22,14 +22,14 @@ from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPo
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 import torch
-from wrapper import RewardWrapper
+from wrapper import RewardWrapper, DroneObservationWrapper
 
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "plot"
 SAVE_PATH = "./fourgates"
 CONFI_PATH = "./config/fourgates.yaml"
-TRAIN_STEPS = 300_000
+TRAIN_STEPS = 50_000
 n_drones  = 1
 def create_race_env(config_path: Path, gui: bool = False) :
 
@@ -39,7 +39,8 @@ def create_race_env(config_path: Path, gui: bool = False) :
 
     # Load configuration and check if firmare should be used.
     env  = gym.make("multi-race-aviary-v0", race_config=config, num_drones=n_drones, gui=gui)
-    wrapper_env = RewardWrapper(env)
+    wrapper_env = DroneObservationWrapper(env)
+    wrapper_env = RewardWrapper(wrapper_env)
     return wrapper_env
 
 
@@ -59,7 +60,7 @@ def linear_schedule(initial_value: float, slope: float=1) -> Callable[[float], f
 
 
 def train(
-    gui: bool = False,
+    gui: bool = True,
     resume: bool = False
 ):
     """Create the environment, check its compatibility with sb3, and run a PPO agent."""
