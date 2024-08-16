@@ -29,30 +29,18 @@ LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "plot"
 SAVE_PATH = "./fourgates"
 CONFI_PATH = "./config/fourgates.yaml"
-TRAIN_STEPS = 50_000
-N_ENVS = 4
-n_drones = 1
-
-
-
-
+TRAIN_STEPS = 300_000
+n_drones  = 1
 def create_race_env(config_path: Path, gui: bool = False) :
 
-    def env_factory():
-        #    """Create the drone racing environment."""
-        config = load_config(config_path)
+    
+    #    """Create the drone racing environment."""
+    config = load_config(config_path)
 
-        # Load configuration and check if firmare should be used.
-        env  = gym.make("multi-race-aviary-v0", race_config=config, num_drones=n_drones, gui=gui)
-        wrapper_env = RewardWrapper(env)
-        return wrapper_env
-    env = make_vec_env(
-        lambda: env_factory(),
-        n_envs = N_ENVS,
-        vec_env_cls=DummyVecEnv
-        )
-    return env
-
+    # Load configuration and check if firmare should be used.
+    env  = gym.make("multi-race-aviary-v0", race_config=config, num_drones=n_drones, gui=gui)
+    wrapper_env = RewardWrapper(env)
+    return wrapper_env
 
 
 def linear_schedule(initial_value: float, slope: float=1) -> Callable[[float], float]:
@@ -86,11 +74,11 @@ def train(
         print("Training new agent...")
         #smaller lr or batch size, toy problem mit nur hovern (reward anpassen)
         #learing rate scheduler
-        policy_kwargs = dict(
-            net_arch=[dict(pi=[128, 128], vf=[128, 128])],
-            activation_fn=torch.nn.ReLU,
-        )
-        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER, policy_kwargs= policy_kwargs)
+        #policy_kwargs = dict(
+        #    net_arch=[dict(pi=[128, 128], vf=[128, 128])],
+        #    activation_fn=torch.nn.ReLU,
+        #)
+        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)#, policy_kwargs= policy_kwargs)
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True,tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
 

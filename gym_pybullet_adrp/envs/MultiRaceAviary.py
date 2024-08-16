@@ -718,7 +718,7 @@ class MultiRaceAviary(BaseAviary):
         NOTE: Unused
         """
         #### Calculated by the Deep Thought supercomputer in 7.5M years
-        return {"answer": 42}
+        return {"task_completed": np.all(self.drones_finished)}
 
 ###############################################################################
 

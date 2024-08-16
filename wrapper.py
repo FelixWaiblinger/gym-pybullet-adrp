@@ -59,7 +59,8 @@ class RewardWrapper(Wrapper):
         """
         # yaw = 0 for all our experiments
         #print(type(action))
-    
+        #set the last element in the numpy array of aciton to 0
+        action[0,3] = 0
         obs, reward, terminated, truncated, info = self.env.step(action)
         reward = self._compute_reward(obs, reward, terminated, truncated, info)
         return obs, reward, terminated, truncated, info
