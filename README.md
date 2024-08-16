@@ -1,4 +1,29 @@
-# gym-pybullet-drones
+# gym-pybullet-adrp
+
+<img src="gym_pybullet_adrp/assets/multi_agent.png" alt="multi_agent" width="600"/>
+
+## Update
+
+This update of [gym-pybullet-drones](https://github.com/utiasDSL/gym-pybullet-drones) aims to keep all previously implemented features and extend them by a new environment for testing multiple competing agents simultaneously.
+- The environment can be set up in **COMPARE** mode to have different agents fly at the same time without interfering with each other.
+- The **COMPETE** mode enables collisions between drones and adds competitor poses to the observation space to enable "real" competitive racing.
+- Gate, obstacle and difficulty configuration is mostly adapted from [safe-control-gym](https://github.com/utiasDSL/safe-control-gym) and the simulated physics are meant to replicate its behaviour as well.
+- The agents all use the low-level Mellinger controller for compatibility with Bitcraze Crazyflie hardware (although the Sim2Real task is not implemented here).
+- Since these controllers are set up as sub-processes it is currently not possible to train more than one agent at a time in this environment.
+
+### Usage
+
+The environment can be installed as described [here](#installation).
+
+To start the multi-agent simulation with two instances of a hard-coded solution (one starting slightly delayed):
+
+```bash
+python scripts/sim.py [--config <config-file>] [--controller <controller(s)>] [--n_runs <num-episodes>] [--n_drones <num-drones>]
+```
+
+**NOTE**: To test different controllers simultaneously it is recommended to specify the list of controller file paths in ```scripts/sim.py```, as well as the preferred race mode.
+
+## gym-pybullet-drones
 
 This is a minimalist refactoring of the original `gym-pybullet-drones` repository, designed for compatibility with [`gymnasium`](https://github.com/Farama-Foundation/Gymnasium), [`stable-baselines3` 2.0](https://github.com/DLR-RM/stable-baselines3/pull/1327), and SITL [`betaflight`](https://github.com/betaflight/betaflight)/[`crazyflie-firmware`](https://github.com/bitcraze/crazyflie-firmware/).
 
