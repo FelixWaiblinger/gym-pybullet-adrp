@@ -12,16 +12,17 @@ import gymnasium as gym
 from gym_pybullet_adrp.utils import load_config, load_controller, sync
 from gym_pybullet_adrp.utils.enums import RaceMode
 from user_controller import BaseController
-
-
+import csv
+waypoint_list_1 = []
+waypoint_list_2 = []
 def simulate(
-    config: str="config/level2.yaml",
+    config: str="config/twogates.yaml",
     controller: str | List[str]=[
-        # "user_controller/HardCodedController.py",
         "user_controller/RLController.py",
+        "user_controller/HardCodedControllerTwoGates.py",
     ],
     n_runs: int=10,
-    n_drones: int=1,
+    n_drones: int=2,
     gui: bool=True,
 ) -> list[float]:
     """Evaluate the drone controller over multiple episodes.
@@ -44,7 +45,7 @@ def simulate(
         race_config=config,
         num_drones=n_drones,
         gui=gui,
-        # racemode=RaceMode.COMPETE
+        racemode=RaceMode.COMPARE,
     )
     gui_timer = pb.addUserDebugText("", np.ones(3), physicsClientId=env.CLIENT)
 
@@ -65,8 +66,9 @@ def simulate(
         episode_start = time.time()
         sim_time, episode_step = 0, 0
         terminated, truncated = False, False
+   
+
         obs, info = env.reset()
-        print(len(obs))
         agents = []
         for drone_id, c in enumerate(controller):
             info["delay"] = drone_id
@@ -88,13 +90,21 @@ def simulate(
 
             # select an action for each agent
             actions = [a.predict(obs[i], ep_time=sim_time) for i, a in enumerate(agents)]
-
             if all(isinstance(a, np.ndarray) for a in actions):
                 actions = np.array(actions)
-
             # perform one step in the environment
             obs, reward, terminated, truncated, _ = env.step(actions)
+            if np.all(env.current_gate >= 2):
+                break
 
+            drone_1 = obs[0]
+            drone_2 = obs[1]
+            waypoint_list_1.append([sim_time, drone_1[0], drone_1[1], drone_1[2],drone_1[6],drone_1[7],drone_1[8]])
+            waypoint_list_2.append([sim_time, drone_2[0], drone_2[1], drone_2[2],drone_2[6],drone_2[7],drone_2[8]])
+            _save_actions_to_csv(waypoint_list_1, "rl_agent.csv")
+            _save_actions_to_csv(waypoint_list_2, "hardcoded.csv")
+
+      
             # log statistics
             stats["episode_rewards"][run] += reward
 
@@ -107,6 +117,12 @@ def simulate(
     env.close()
 
     return stats["episode_times"]
+
+def _save_actions_to_csv(action: list, filename: str):
+    """Save the actions to a csv file"""
+    with open(filename, mode='w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerows(action)
 
 
 if __name__ == "__main__":

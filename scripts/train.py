@@ -27,12 +27,11 @@ from wrapper import RewardWrapper, DroneObservationWrapper
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
 LOG_NAME = "plot"
-SAVE_PATH = "./fourgates"
-CONFI_PATH = "./config/fourgates.yaml"
-TRAIN_STEPS = 50_000
+SAVE_PATH = "./twogates"
+CONFI_PATH = "./config/twogates.yaml"
+TRAIN_STEPS =700_000
 n_drones  = 1
 def create_race_env(config_path: Path, gui: bool = False) :
-
     
     #    """Create the drone racing environment."""
     config = load_config(config_path)
@@ -60,7 +59,7 @@ def linear_schedule(initial_value: float, slope: float=1) -> Callable[[float], f
 
 
 def train(
-    gui: bool = True,
+    gui: bool = False,
     resume: bool = False
 ):
     """Create the environment, check its compatibility with sb3, and run a PPO agent."""
@@ -75,11 +74,11 @@ def train(
         print("Training new agent...")
         #smaller lr or batch size, toy problem mit nur hovern (reward anpassen)
         #learing rate scheduler
-        #policy_kwargs = dict(
-        #    net_arch=[dict(pi=[128, 128], vf=[128, 128])],
-        #    activation_fn=torch.nn.ReLU,
-        #)
-        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER)#, policy_kwargs= policy_kwargs)
+        policy_kwargs = dict(
+            net_arch=[dict(pi=[128, 128], vf=[128, 128])],
+            activation_fn=torch.nn.ReLU,
+        )
+        agent = PPO("MlpPolicy", env, verbose=1, tensorboard_log=LOG_FOLDER, policy_kwargs= policy_kwargs)
     agent.learn(total_timesteps=TRAIN_STEPS, progress_bar=True,tb_log_name=LOG_NAME)
     agent.save(SAVE_PATH)
 

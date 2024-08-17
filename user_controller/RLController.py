@@ -9,7 +9,7 @@ from gym_pybullet_adrp.utils.utils import map2pi
 from user_controller import BaseController
 
 
-AGENT_PATH = "user_controller/example_RL_model"
+AGENT_PATH = "user_controller/twogates"
 
 
 class RLController(BaseController):
@@ -31,7 +31,6 @@ class RLController(BaseController):
 
         self.agent = PPO.load(AGENT_PATH)
         self.action_scale = np.array([1, 1, 1, np.pi])
-        self.drone_pose = initial_obs[[0, 1, 2, 5]]
         self.time = 0
 
 ###############################################################################
@@ -45,9 +44,10 @@ class RLController(BaseController):
     ) -> np.ndarray:
         """Predict the next action."""
         obs = self._observation_transform(obs)
-
+        #reshape obs to fit the model
         # store additional infos
-        self.drone_pose = obs[[0, 1, 2, 5]]
+        #reshape obs to (n_env, 1, 49)
+        obs = np.expand_dims(obs, axis=0)
         self.time = ep_time
 
         action, _ = self.agent.predict(obs, deterministic=True)
@@ -61,12 +61,12 @@ class RLController(BaseController):
         """Transform the action predicted by the agent before propagating to
         the environment.
         """
-        action[3] = 0
-        action = self.drone_pose + (action * self.action_scale)
-        action[3] = map2pi(action[3])  # Ensure yaw is in [-pi, pi]
+        action[0,3] = 0
+        action = (action * self.action_scale) 
+        action[0,3] = map2pi(action[0,3])  # Ensure yaw is in [-pi, pi]
 
         cmd = Command.FULLSTATE
-        args = [action[:3], ZERO3, ZERO3, action[3], ZERO3, self.time]
+        args = [action[0,:3], ZERO3, ZERO3, action[0,3], ZERO3, self.time]
 
         action = (cmd, args)
 
