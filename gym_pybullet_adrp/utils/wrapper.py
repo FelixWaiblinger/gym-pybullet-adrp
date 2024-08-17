@@ -6,6 +6,8 @@ from typing import Any
 import numpy as np
 from gymnasium import Env, Wrapper
 
+from gym_pybullet_adrp.utils.enums import Command
+
 
 class DroneObservationWrapper(Wrapper):
     """Wrapper to alter the default observation space from the environment for
@@ -48,7 +50,11 @@ class DroneObservationWrapper(Wrapper):
             flags, and the info dict.
         """
         # guarantuee yaw actions to be zero
-        action[0,3] = 0
+        for act in action:
+            if isinstance(act, np.ndarray):
+                act[3] = 0
+            elif isinstance(act, tuple) and act[0] == Command.FULLSTATE:
+                act[1][3] = 0
 
         obs, reward, terminated, truncated, info = self.env.step(action)
 

@@ -11,13 +11,14 @@ import gymnasium as gym
 
 from gym_pybullet_adrp.utils import load_config, load_controller, sync
 from gym_pybullet_adrp.utils.enums import RaceMode
+from gym_pybullet_adrp.utils.wrapper import DroneObservationWrapper
 from user_controller import BaseController
 
 
 def simulate(
     config: str="config/getting_started.yaml",
     controller: str | List[str]=[
-        # "user_controller/HardCodedController.py",
+        "user_controller/HardCodedController.py",
         "user_controller/RLController.py",
     ],
     n_runs: int=10,
@@ -44,8 +45,11 @@ def simulate(
         race_config=config,
         num_drones=n_drones,
         gui=gui,
-        # racemode=RaceMode.COMPETE
+        racemode=RaceMode.COMPARE
     )
+    # NOTE: for evaluating "twogates.yaml"
+    # env = DroneObservationWrapper(env)
+
     gui_timer = pb.addUserDebugText("", np.ones(3), physicsClientId=env.CLIENT)
 
     # initialize drone agents

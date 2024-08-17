@@ -6,7 +6,7 @@
 # | `level2.yaml`          | *Yes*                | *Yes*         | *Yes*                   | *No*           | Learning, re-planning |
 # | `level3.yaml`          | *Yes*                | *Yes*         | *Yes*                   | *Yes*          | Robustness            |
 
-# Level 0
+# Two Gates
 
 # ENVIRONMENT
 # =============================================================================
@@ -27,14 +27,14 @@ done_on_collision: True # terminate if collided with another object
 
 # DRONE INITIALIZATION (pre-randomization)
 # =============================================================================
-init_states: # one line per drone TODO: is there a nicer way?
+init_states:
   drone0:
     pos: [0.9, 1.0, 0.05] # position
     vel: [0, 0, 0]        # linear velocity
     rpy: [0, 0, 0]        # rotation
     pqr: [0, 0, 0]        # angular velocity
   drone1:
-    pos: [1.1, 1., 0.05]
+    pos: [1.1, 1.0, 0.05]
     vel: [0, 0, 0]
     rpy: [0, 0, 0]
     pqr: [0, 0, 0]
@@ -42,11 +42,10 @@ init_states: # one line per drone TODO: is there a nicer way?
 # GATE INITIALIZATION (pre-randomization)
 # =============================================================================
 gates: [ # x, y, z, r, p, y, type (0: `tall`, 1: `low`)
-      [1.0,0.4, 0.525, 0, 0,0, 1],
-      [1.0,-1.0, 1.0, 0, 0,0.0, 0],
-       [5.0,-2.7, 1.0, 0, 0,0.0, 0],
-       [5.0,-2, 1.0, 0, 0,0, 0],
-
+  [1.0, 0.4, 0.525, 0, 0, 0, 1.0],
+  [1.0, -1.0, 1.0, 0, 0, 0, 0],
+  [5.0, -2.7, 1.0, 0, 0, 0, 0],
+  [5.0, -2.0, 1.0, 0, 0, 0, 0],
 ]
 
 # OBSTACLE INITIALIZATION (pre-randomization)
