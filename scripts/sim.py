@@ -101,8 +101,8 @@ def simulate(
             drone_2 = obs[1]
             waypoint_list_1.append([sim_time, drone_1[0], drone_1[1], drone_1[2],drone_1[6],drone_1[7],drone_1[8]])
             waypoint_list_2.append([sim_time, drone_2[0], drone_2[1], drone_2[2],drone_2[6],drone_2[7],drone_2[8]])
-            _save_actions_to_csv(waypoint_list_1, "rl_agent.csv")
-            _save_actions_to_csv(waypoint_list_2, "hardcoded.csv")
+            _save_actions_to_csv(waypoint_list_1, "plot/rl_agent.csv")
+            _save_actions_to_csv(waypoint_list_2, "plot/hardcoded.csv")
 
       
             # log statistics
