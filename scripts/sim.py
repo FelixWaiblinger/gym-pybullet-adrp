@@ -18,7 +18,7 @@ waypoint_list_2 = []
 def simulate(
     config: str="config/twogates.yaml",
     controller: str | List[str]=[
-        "user_controller/RLController.py",
+        "user_controller/RLControllerTwoGates.py",
         "user_controller/HardCodedControllerTwoGates.py",
     ],
     n_runs: int=10,

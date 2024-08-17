@@ -12,7 +12,6 @@ import yaml
 from munch import munchify
 from typing import TYPE_CHECKING, Type, Callable
 import gymnasium as gym
-from gym_pybullet_adrp.utils import load_config, load_controller, sync
 
 from stable_baselines3 import PPO, SAC, DDPG,TD3,A2C
 from stable_baselines3.common.env_checker import check_env
@@ -22,7 +21,8 @@ from stable_baselines3.common.policies  import  ActorCriticPolicy as a2cppoMlpPo
 from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv,SubprocVecEnv
 import torch
-from wrapper import RewardWrapper, DroneObservationWrapper
+from gym_pybullet_adrp.utils.wrapper import RewardWrapper, DroneObservationWrapper
+from gym_pybullet_adrp.utils import load_config, load_controller, sync
 
 logger = logging.getLogger(__name__)
 LOG_FOLDER = "./ppo_drones_tensorboard/"
